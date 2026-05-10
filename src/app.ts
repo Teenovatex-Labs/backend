@@ -1,37 +1,37 @@
 import express from 'express';
-import type { Request, Response } from 'express';
-import mongoose from 'mongoose';
+import cors from 'cors';
 import dotenv from 'dotenv';
-import { authRoutes } from './routes/authRoutes';
-import { userRoutes } from './routes/userRoutes';
+import { globalLimiter } from './middleware/rateLimiter.js';
+import authRouter from './routes/auth.js';
+import usersRouter from './routes/users.js';
+import projectsRouter from './routes/projects.js';
+import votesRouter from './routes/votes.js';
+import pointsRouter from './routes/points.js';
+import leaderboardRouter from './routes/leaderboard.js';
+import notificationsRouter from './routes/notifications.js';
+import settingsRouter from './routes/settings.js';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
+app.use(cors({ origin: process.env.FRONTEND_URL ?? '*', credentials: true }));
 app.use(express.json());
+app.use(globalLimiter);
 
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
+const v1 = '/api/v1';
+app.use(`${v1}/auth`, authRouter);
+app.use(`${v1}/users`, usersRouter);
+app.use(`${v1}/projects`, projectsRouter);
+app.use(`${v1}/votes`, votesRouter);
+app.use(`${v1}/points`, pointsRouter);
+app.use(`${v1}/leaderboard`, leaderboardRouter);
+app.use(`${v1}/notifications`, notificationsRouter);
+app.use(`${v1}/settings`, settingsRouter);
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('Server is running');
-});
+app.get('/', (_req, res) => res.json({ status: 'TX API v1 running' }));
 
-const startServer = async () => {
-  try {
-    const mongoUri = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/express-auth';
-    await mongoose.connect(mongoUri);
-    console.log('Connected to MongoDB');
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-  }
-};
-
-startServer();
+const PORT = process.env.PORT ?? 3000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 export { app };

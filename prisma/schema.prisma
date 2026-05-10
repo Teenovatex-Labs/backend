@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  full_name     String
+  email         String    @unique
+  password_hash String
+  avatar_url    String?
+  bio           String?
+  social_links  Json?
+  points        Int       @default(0)
+  streak        Int       @default(0)
+  last_login_at DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  projects      Project[]
+  votes         Vote[]
+  points_log    PointsLog[]
+  notifications Notification[]
+  sessions      Session[]
+  settings      UserSettings?
+  following     Follow[]      @relation("follower")
+  followers     Follow[]      @relation("following")
+
+  @@map("users")
+}
+
+model Project {
+  id                String   @id @default(uuid())
+  user_id           String
+  name              String
+  slug              String   @unique
+  short_description String
+  description       String
+  category          String
+  cover_url         String?
+  demo_url          String?
+  github_url        String?
+  tx_post_url       String?
+  tags              String[]
+  vote_count        Int      @default(0)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  user  User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  votes Vote[]
+
+  @@map("projects")
+}
+
+model Vote {
+  id         String   @id @default(uuid())
+  user_id    String
+  project_id String
+  voted_at   DateTime @default(now())
+
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@map("votes")
+}
+
+model PointsLog {
+  id           String   @id @default(uuid())
+  user_id      String
+  points       Int
+  reason       String
+  reference_id String?
+  created_at   DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("points_log")
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  user_id    String
+  type       String
+  message    String
+  read       Boolean  @default(false)
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  user_id     String
+  token_hash  String   @unique
+  device_info String?
+  ip          String?
+  last_active DateTime @default(now())
+  created_at  DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Follow {
+  follower_id  String
+  following_id String
+  created_at   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [follower_id], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [following_id], references: [id], onDelete: Cascade)
+
+  @@id([follower_id, following_id])
+  @@map("follows")
+}
+
+model UserSettings {
+  user_id             String  @id
+  email_notifications Boolean @default(true)
+  vote_alerts         Boolean @default(true)
+  contest_updates     Boolean @default(true)
+  public_profile      Boolean @default(true)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}
