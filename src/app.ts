@@ -32,6 +32,6 @@ app.use(`${v1}/settings`, settingsRouter);
 app.get('/', (_req, res) => res.json({ status: 'TX API v1 running' }));
 
 const PORT = process.env.PORT ?? 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port http://localhost:${PORT}`));
 
 export { app };
