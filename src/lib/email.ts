@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 
-// Gmail SMTP — port 465 with SSL (secure: true)
-// Requires a Gmail App Password: https://myaccount.google.com/apppasswords
+
+
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
   port: 465,

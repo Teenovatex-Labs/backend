@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 
-// ─── GET /api/v1/admin/contest ───────────────────────────────────────────────
+
 export const getContestState = async (req: AuthRequest, res: Response): Promise<void> => {
   const [settings, totalVotes, activeProjects, activeVoters, topProjects] = await Promise.all([
     prisma.systemSetting.findMany({
@@ -29,7 +29,7 @@ export const getContestState = async (req: AuthRequest, res: Response): Promise<
     ? Math.max(0, Math.ceil((endsAtDate.getTime() - Date.now()) / 86_400_000))
     : null;
 
-  // Total participants is distinct users who created projects OR voted
+  
   const participantIds = new Set([
     ...activeProjects.map(p => p.user_id),
     ...activeVoters.map(v => v.user_id),
@@ -51,7 +51,7 @@ export const getContestState = async (req: AuthRequest, res: Response): Promise<
   });
 };
 
-// ─── PATCH /api/v1/admin/contest/status ──────────────────────────────────────
+
 export const updateContestStatus = async (req: AuthRequest, res: Response): Promise<void> => {
   const { status } = req.body as { status: string };
 
@@ -64,13 +64,13 @@ export const updateContestStatus = async (req: AuthRequest, res: Response): Prom
   res.json({ message: `Contest status updated to ${status}` });
 };
 
-// ─── POST /api/v1/admin/contest/winners ──────────────────────────────────────
+
 type WinnerInput = { user_id: string; rank: number; prize: string };
 
 export const announceWinners = async (req: AuthRequest, res: Response): Promise<void> => {
   const { winners, announcement_message } = req.body as { winners: WinnerInput[]; announcement_message: string };
 
-  // Validate all user_ids exist
+  
   const userIds = winners.map(w => w.user_id);
   const usersCount = await prisma.user.count({ where: { id: { in: userIds } } });
   
@@ -79,11 +79,11 @@ export const announceWinners = async (req: AuthRequest, res: Response): Promise<
     return;
   }
 
-  // Get all users for the broadcast
+  
   const allUsers = await prisma.user.findMany({ select: { id: true } });
 
   await prisma.$transaction([
-    // 1. Notify individual winners
+    
     ...winners.map(w => 
       prisma.notification.create({
         data: {
@@ -93,7 +93,7 @@ export const announceWinners = async (req: AuthRequest, res: Response): Promise<
         },
       })
     ),
-    // 2. Broadcast announcement to everyone
+    
     prisma.notification.createMany({
       data: allUsers.map(u => ({
         user_id: u.id,

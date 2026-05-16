@@ -4,11 +4,11 @@ import { prisma } from '../db.js';
 
 const VALID_TYPES = ['announcement', 'warning', 'contest', 'feature'];
 
-// ─── POST /api/v1/admin/notify/broadcast ──────────────────────────────────────
+
 export const broadcastNotification = async (req: AuthRequest, res: Response): Promise<void> => {
   const { type, message } = req.body as { type: string; message: string };
 
-  // Fetch all user IDs to create notifications (in a real system with 1M users, this would use a background job/queue)
+  
   const users = await prisma.user.findMany({ select: { id: true } });
   
   if (users.length === 0) {
@@ -27,7 +27,7 @@ export const broadcastNotification = async (req: AuthRequest, res: Response): Pr
   res.json({ message: `Broadcast sent to ${users.length} users` });
 };
 
-// ─── POST /api/v1/admin/notify/user/:userId ──────────────────────────────────
+
 export const userNotification = async (req: AuthRequest, res: Response): Promise<void> => {
   const { userId } = req.params as { userId: string };
   const { type, message } = req.body as { type: string; message: string };

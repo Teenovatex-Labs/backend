@@ -9,7 +9,7 @@ import { createProjectSchema } from '../schemas/project.js';
 type MulterAuthRequest = AuthRequest & { file?: Express.Multer.File };
 
 export const createProject = async (req: MulterAuthRequest, res: Response): Promise<void> => {
-  // Normalize tags from multipart (may be string or array)
+  
   const rawTags = req.body.tags as string | string[] | undefined;
   const tags = Array.isArray(rawTags) ? rawTags : rawTags ? [String(rawTags)] : [];
   req.body.tags = tags;

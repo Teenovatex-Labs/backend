@@ -2,7 +2,7 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 
-// Shared user select for list view 
+
 const listSelect = {
   id:           true,
   username:     true,
@@ -18,7 +18,7 @@ const listSelect = {
   _count: { select: { projects: true, votes: true, sessions: true } },
 } as const;
 
-// GET /api/v1/admin/users 
+
 export const listUsers = async (req: AuthRequest, res: Response): Promise<void> => {
   const {
     page   = '1',
@@ -32,7 +32,7 @@ export const listUsers = async (req: AuthRequest, res: Response): Promise<void> 
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const skip     = (pageNum - 1) * limitNum;
 
-  // ── Filter ──────────────────────────────────────────────────────────────────
+  
   const statusFilter =
     status === 'banned' ? { banned: true } :
     status === 'active' ? { banned: false } :
@@ -50,11 +50,11 @@ export const listUsers = async (req: AuthRequest, res: Response): Promise<void> 
 
   const where = { ...statusFilter, ...searchFilter };
 
-  // ── Sort ────────────────────────────────────────────────────────────────────
+  
   const orderBy =
     sort === 'points' ? { points:     'desc' as const } :
     sort === 'votes'  ? { votes:      { _count: 'desc' as const } } :
-    /* newest */        { created_at: 'desc' as const };
+            { created_at: 'desc' as const };
 
   const [users, total] = await Promise.all([
     prisma.user.findMany({ where, orderBy, skip, take: limitNum, select: listSelect }),
@@ -69,7 +69,7 @@ export const listUsers = async (req: AuthRequest, res: Response): Promise<void> 
   });
 };
 
-// ─── GET /api/v1/admin/users/:id ─────────────────────────────────────────────
+
 export const getUserById = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
@@ -103,7 +103,7 @@ export const getUserById = async (req: AuthRequest, res: Response): Promise<void
   res.json({ ...user, sessions_count: user._count.sessions });
 };
 
-// ─── PATCH /api/v1/admin/users/:id/ban ───────────────────────────────────────
+
 export const banUser = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const { reason } = req.body as { reason?: string };
@@ -112,7 +112,7 @@ export const banUser = async (req: AuthRequest, res: Response): Promise<void> =>
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
   if (user.banned) { res.status(409).json({ error: 'User is already banned', code: 'ALREADY_BANNED' }); return; }
 
-  // Ban + wipe all sessions atomically
+  
   await prisma.$transaction([
     prisma.user.update({ where: { id }, data: { banned: true } }),
     prisma.session.deleteMany({ where: { user_id: id } }),
@@ -126,7 +126,7 @@ export const banUser = async (req: AuthRequest, res: Response): Promise<void> =>
   res.json({ message: `User ${user.username} has been banned`, username: user.username });
 };
 
-// ─── PATCH /api/v1/admin/users/:id/unban ─────────────────────────────────────
+
 export const unbanUser = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
@@ -139,7 +139,7 @@ export const unbanUser = async (req: AuthRequest, res: Response): Promise<void> 
   res.json({ message: `User ${user.username} has been unbanned`, username: user.username });
 };
 
-// ─── PATCH /api/v1/admin/users/:id/points ────────────────────────────────────
+
 export const adjustPoints = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const { amount, reason } = req.body as { amount: number; reason: string };
@@ -148,7 +148,7 @@ export const adjustPoints = async (req: AuthRequest, res: Response): Promise<voi
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
   const previous_points = user.points;
-  const new_points      = Math.max(0, previous_points + amount); // floor at 0
+  const new_points      = Math.max(0, previous_points + amount); 
 
   await prisma.$transaction([
     prisma.user.update({ where: { id }, data: { points: new_points } }),
@@ -164,16 +164,16 @@ export const adjustPoints = async (req: AuthRequest, res: Response): Promise<voi
   });
 };
 
-// ─── DELETE /api/v1/admin/users/:id ──────────────────────────────────────────
+
 export const deleteUser = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
-  // confirm is validated by Zod
+  
   const { confirm } = req.body as { confirm: boolean };
 
   const user = await prisma.user.findUnique({ where: { id }, select: { id: true } });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  // Cascade is handled by onDelete: Cascade on all child relations in schema
+  
   await prisma.user.delete({ where: { id } });
 
   res.json({ message: 'User and all associated data permanently deleted' });

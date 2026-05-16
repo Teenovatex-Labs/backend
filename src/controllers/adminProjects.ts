@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 
-// ─── GET /api/v1/admin/projects ─────────────────────────────────────────────
+
 export const listProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   const {
     page     = '1',
@@ -18,7 +18,7 @@ export const listProjects = async (req: AuthRequest, res: Response): Promise<voi
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const skip     = (pageNum - 1) * limitNum;
 
-  // ── Filter ──────────────────────────────────────────────────────────────────
+  
   const statusFilter =
     status === 'featured' ? { featured: true } :
     status === 'flagged'  ? { flagged: true } :
@@ -37,11 +37,11 @@ export const listProjects = async (req: AuthRequest, res: Response): Promise<voi
 
   const where = { ...statusFilter, ...searchFilter, ...categoryFilter };
 
-  // ── Sort ────────────────────────────────────────────────────────────────────
+  
   const orderBy =
     sort === 'votes'   ? { vote_count: 'desc' as const } :
     sort === 'flagged' ? { flag_count: 'desc' as const } :
-    /* newest */         { created_at: 'desc' as const };
+             { created_at: 'desc' as const };
 
   const [projects, total] = await Promise.all([
     prisma.project.findMany({
@@ -73,7 +73,7 @@ export const listProjects = async (req: AuthRequest, res: Response): Promise<voi
   });
 };
 
-// ─── GET /api/v1/admin/projects/flagged ──────────────────────────────────────
+
 export const listFlaggedProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   const { page = '1', limit = '20' } = req.query as Record<string, string>;
 
@@ -114,7 +114,7 @@ export const listFlaggedProjects = async (req: AuthRequest, res: Response): Prom
   });
 };
 
-// ─── PATCH /api/v1/admin/projects/:id/feature ────────────────────────────────
+
 export const featureProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
@@ -156,7 +156,7 @@ export const featureProject = async (req: AuthRequest, res: Response): Promise<v
   });
 };
 
-// ─── PATCH /api/v1/admin/projects/:id/unfeature ──────────────────────────────
+
 export const unfeatureProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
@@ -169,7 +169,7 @@ export const unfeatureProject = async (req: AuthRequest, res: Response): Promise
   res.json({ message: `Project ${project.name} unfeatured` });
 };
 
-// ─── DELETE /api/v1/admin/projects/:id ───────────────────────────────────────
+
 export const deleteProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
   const { reason } = req.body as { reason: string };

@@ -2,21 +2,21 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 
-// ─── GET /api/v1/admin/votes ──────────────────────────────────────────────────
+
 export const listVotes = async (req: AuthRequest, res: Response): Promise<void> => {
   const {
     page       = '1',
     limit      = '50',
     user_id,
     project_id,
-    date, // format: YYYY-MM-DD
+    date, 
   } = req.query as Record<string, string | undefined>;
 
   const pageNum  = Math.max(1, parseInt(page));
   const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
   const skip     = (pageNum - 1) * limitNum;
 
-  // Build where clause
+  
   let where: any = {};
   if (user_id) where.user_id = user_id;
   if (project_id) where.project_id = project_id;
@@ -52,7 +52,7 @@ export const listVotes = async (req: AuthRequest, res: Response): Promise<void> 
     prisma.vote.count({ where }),
   ]);
 
-  // Format response to match spec: { ...project, owner }
+  
   const formattedVotes = votes.map((v) => ({
     id: v.id,
     voted_at: v.voted_at,
@@ -73,7 +73,7 @@ export const listVotes = async (req: AuthRequest, res: Response): Promise<void> 
   });
 };
 
-// ─── DELETE /api/v1/admin/votes/:id ──────────────────────────────────────────
+
 export const deleteVote = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
@@ -90,7 +90,7 @@ export const deleteVote = async (req: AuthRequest, res: Response): Promise<void>
     return;
   }
 
-  // Atomically delete vote, decrement voter points, and decrement project vote count
+  
   await prisma.$transaction([
     prisma.vote.delete({ where: { id } }),
     prisma.user.update({

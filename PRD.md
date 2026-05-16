@@ -278,7 +278,7 @@ trending&category=AI&search=devtrack
 Response 200 :
 json
 {
-"projects": [ /* array of project objects */ ],
+"projects": [  ],
 "total": 80,
 "page": 1,
 "pages": 7

@@ -50,10 +50,10 @@ app.use(`${v1}/admin`, adminRouter);
 
 app.get('/', (_req, res) => res.json({ status: 'TX API v1 running' }));
 
-// 404 Fallback Handler
+
 app.use(notFoundHandler);
 
-// Global Error Handler
+
 app.use(errorHandler);
 
 const PORT = process.env.PORT ?? 3000;

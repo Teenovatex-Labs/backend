@@ -2,16 +2,12 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 
-/**
- * GET /api/v1/admin/stats
- * Returns platform-wide counts for the admin dashboard.
- * All time-based counts use the start of the current UTC day as the boundary.
- */
+
 export const getAdminStats = async (_req: AuthRequest, res: Response): Promise<void> => {
   const startOfToday = new Date();
   startOfToday.setUTCHours(0, 0, 0, 0);
 
-  // ─── Run all DB counts concurrently ────────────────────────────────────────
+  
   const [
     usersTotal,
     usersNewToday,
@@ -46,7 +42,7 @@ export const getAdminStats = async (_req: AuthRequest, res: Response): Promise<v
     }),
   ]);
 
-  // ─── Contest config (from DB fallback to env) ──────────────────────────────
+  
   const dbSettings = Object.fromEntries(pointsAggregateOrSettings.map(s => [s.key, s.value]));
   const contestEndsAtRaw = dbSettings['contest_ends_at'] ?? process.env.CONTEST_ENDS_AT ?? '';
   const contestStatus    = dbSettings['contest_status'] ?? process.env.CONTEST_STATUS  ?? 'inactive';
@@ -56,7 +52,7 @@ export const getAdminStats = async (_req: AuthRequest, res: Response): Promise<v
     ? Math.max(0, Math.ceil((endsAt.getTime() - Date.now()) / 86_400_000))
     : null;
 
-  // ─── Response ──────────────────────────────────────────────────────────────
+  
   res.json({
     users: {
       total:        usersTotal,

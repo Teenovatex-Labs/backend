@@ -21,7 +21,7 @@ export const requireAuth = asyncHandler(async (req: AuthRequest, res: Response, 
       return;
     }
     
-    // Strict check for banned users
+    
     const user = await prisma.user.findUnique({
       where: { id: decoded.userId },
       select: { id: true, banned: true },
@@ -43,11 +43,7 @@ export const requireAuth = asyncHandler(async (req: AuthRequest, res: Response, 
   }
 });
 
-/**
- * requireAdmin — must be chained after requireAuth.
- * Looks up the authenticated user and checks role === 'admin'.
- * Returns 403 if the user is not an admin.
- */
+
 export const requireAdmin = asyncHandler(async (
   req: AuthRequest,
   res: Response,

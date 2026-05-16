@@ -22,7 +22,7 @@ router.get('/:id', asyncHandler(getProject));
 router.patch('/:id', requireAuth, validate(updateProjectSchema), asyncHandler(updateProject));
 router.delete('/:id', requireAuth, asyncHandler(deleteProject));
 
-// Voting sub-resource
+
 router.post('/:id/vote', requireAuth, voteLimiter, asyncHandler(castVote));
 router.delete('/:id/vote', requireAuth, asyncHandler(removeVote));
 
