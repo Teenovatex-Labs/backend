@@ -16,7 +16,7 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
   const url = `${process.env.FRONTEND_URL ?? 'http://localhost:5173'}/reset-password?token=${token}`;
 
   if (!process.env.GMAIL_USER) {
-    console.log(`[DEV] Password reset for ${email}: ${url}`);
+    console.log(`[DEV] Password reset email would be sent to ${email} (configure GMAIL_USER to send emails)`);
     return;
   }
 

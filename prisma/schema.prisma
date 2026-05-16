@@ -16,6 +16,8 @@ model User {
   avatar_url    String?
   bio           String?
   social_links  Json?
+  role          String    @default("user")
+  banned        Boolean   @default(false)
   points        Int       @default(0)
   streak        Int       @default(0)
   last_login_at DateTime?
@@ -47,6 +49,10 @@ model Project {
   github_url        String?
   tx_post_url       String?
   tags              String[]
+  featured          Boolean  @default(false)
+  flagged           Boolean  @default(false)
+  flag_count        Int      @default(0)
+  flag_reasons      String[] @default([])
   vote_count        Int      @default(0)
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
@@ -131,4 +137,11 @@ model UserSettings {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("settings")
+}
+
+model SystemSetting {
+  key   String @id
+  value String
+
+  @@map("system_settings")
 }

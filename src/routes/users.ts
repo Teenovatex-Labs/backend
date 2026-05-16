@@ -11,16 +11,17 @@ import {
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { upload } from '../middleware/upload.js';
+import { asyncHandler } from '../middleware/error.js';
 import { updateUserSchema } from '../schemas/user.js';
 
 const router = Router();
 
-router.get('/me', requireAuth, getMe);
-router.patch('/me', requireAuth, validate(updateUserSchema), updateMe);
-router.post('/me/avatar', requireAuth, upload.single('avatar'), uploadAvatar);
-router.get('/:username', getUserByUsername);
-router.get('/:username/projects', getUserProjects);
-router.post('/:username/follow', requireAuth, followUser);
-router.delete('/:username/follow', requireAuth, unfollowUser);
+router.get('/me', requireAuth, asyncHandler(getMe));
+router.patch('/me', requireAuth, validate(updateUserSchema), asyncHandler(updateMe));
+router.post('/me/avatar', requireAuth, upload.single('avatar'), asyncHandler(uploadAvatar));
+router.get('/:username', asyncHandler(getUserByUsername));
+router.get('/:username/projects', asyncHandler(getUserProjects));
+router.post('/:username/follow', requireAuth, asyncHandler(followUser));
+router.delete('/:username/follow', requireAuth, asyncHandler(unfollowUser));
 
 export default router;

@@ -30,3 +30,5 @@ export const resetPasswordSchema = z.object({
   token: z.string(),
   new_password: strongPassword,
 });
+
+export const logoutSchema = z.object({ refresh_token: z.string() });
