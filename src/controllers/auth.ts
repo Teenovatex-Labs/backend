@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../db.js';
 import {
   createSession,
@@ -10,6 +11,9 @@ import {
 } from '../lib/tokens.js';
 import { awardPoints } from '../lib/points.js';
 import { sendPasswordResetEmail } from '../lib/email.js';
+import { slugify, uniqueSlug } from '../lib/slug.js';
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { full_name, username, email, password } = req.body as {
@@ -46,7 +50,18 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   const { email, password } = req.body as { email: string; password: string };
 
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+  if (!user) {
+    res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+    return;
+  }
+  if (!user.password_hash) {
+    res.status(401).json({
+      error: 'This account uses Google sign-in — continue with Google instead',
+      code: 'GOOGLE_ACCOUNT',
+    });
+    return;
+  }
+  if (!(await bcrypt.compare(password, user.password_hash))) {
     res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
     return;
   }
@@ -150,6 +165,70 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
   await prisma.session.deleteMany({ where: { user_id: decoded.userId } });
 
   res.json({ message: 'Password updated successfully' });
+};
+
+export const googleAuth = async (req: Request, res: Response): Promise<void> => {
+  const { id_token } = req.body as { id_token: string };
+
+  if (!process.env.GOOGLE_CLIENT_ID) {
+    res.status(500).json({ error: 'Google sign-in is not configured', code: 'GOOGLE_NOT_CONFIGURED' });
+    return;
+  }
+
+  let payload: { sub: string; email?: string; name?: string; picture?: string } | undefined;
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: id_token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch {
+    res.status(401).json({ error: 'Invalid Google token', code: 'INVALID_TOKEN' });
+    return;
+  }
+
+  if (!payload?.email) {
+    res.status(401).json({ error: 'Invalid Google token', code: 'INVALID_TOKEN' });
+    return;
+  }
+
+  let user = await prisma.user.findUnique({ where: { google_id: payload.sub } });
+
+  if (!user) {
+    const existingByEmail = await prisma.user.findUnique({ where: { email: payload.email } });
+    if (existingByEmail) {
+      user = await prisma.user.update({
+        where: { id: existingByEmail.id },
+        data: {
+          google_id: payload.sub,
+          avatar_url: existingByEmail.avatar_url ?? payload.picture ?? null,
+        },
+      });
+    } else {
+      const base = slugify(payload.name ?? payload.email.split('@')[0] ?? 'builder');
+      const username = await uniqueSlug(
+        base,
+        async (s) => !!(await prisma.user.findUnique({ where: { username: s } }))
+      );
+      user = await prisma.user.create({
+        data: {
+          full_name: payload.name ?? payload.email,
+          username,
+          email: payload.email,
+          google_id: payload.sub,
+          avatar_url: payload.picture ?? null,
+          settings: { create: {} },
+        },
+      });
+    }
+  }
+
+  const tokens = await createSession(user.id, req);
+
+  res.json({
+    ...tokens,
+    user: { id: user.id, username: user.username, avatar_url: user.avatar_url },
+  });
 };
 
 export const logout = async (req: Request, res: Response): Promise<void> => {

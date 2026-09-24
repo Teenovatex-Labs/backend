@@ -12,7 +12,8 @@ model User {
   username      String    @unique
   full_name     String
   email         String    @unique
-  password_hash String
+  password_hash String?
+  google_id     String?   @unique
   avatar_url    String?
   bio           String?
   social_links  Json?

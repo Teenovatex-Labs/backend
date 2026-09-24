@@ -24,6 +24,8 @@ export const loginSchema = z.object({
 
 export const refreshSchema = z.object({ refresh_token: z.string() });
 
+export const googleAuthSchema = z.object({ id_token: z.string() });
+
 export const forgotPasswordSchema = z.object({ email: z.string().email() });
 
 export const resetPasswordSchema = z.object({

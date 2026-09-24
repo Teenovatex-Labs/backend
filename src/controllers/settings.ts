@@ -12,7 +12,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  if (!(await bcrypt.compare(current_password, user.password_hash))) {
+  if (!user.password_hash || !(await bcrypt.compare(current_password, user.password_hash))) {
     res.status(400).json({ error: 'Current password is incorrect', code: 'INVALID_PASSWORD' });
     return;
   }
@@ -81,7 +81,7 @@ export const deleteAccount = async (req: AuthRequest, res: Response): Promise<vo
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  if (!(await bcrypt.compare(password, user.password_hash))) {
+  if (user.password_hash && !(await bcrypt.compare(password, user.password_hash))) {
     res.status(400).json({ error: 'Incorrect password', code: 'INVALID_PASSWORD' });
     return;
   }
