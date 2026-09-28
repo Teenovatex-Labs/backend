@@ -10,8 +10,7 @@ import {
   generateResetToken,
 } from '../lib/tokens.js';
 import { awardPoints } from '../lib/points.js';
-import { sendPasswordResetEmail } from '../lib/email.js';
-import { sendVerificationEmail } from '../lib/resend.js';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/resend.js';
 import {
   generateVerificationCode,
   hashVerificationCode,
@@ -267,11 +266,58 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   const user = await prisma.user.findUnique({ where: { email } });
 
   if (user) {
+    if (isWithinResendCooldown(user.reset_code_expires_at)) {
+      res.status(429).json({
+        error: 'Please wait before requesting another code',
+        code: 'RESEND_COOLDOWN',
+        retry_after_seconds: secondsUntilResendAllowed(user.reset_code_expires_at),
+      });
+      return;
+    }
+
+    const code = generateVerificationCode();
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        reset_code_hash: hashVerificationCode(code, user.id),
+        reset_code_expires_at: verificationExpiry(),
+        reset_attempts: 0,
+      },
+    });
     const token = generateResetToken(user.id);
-    await sendPasswordResetEmail(email, token);
+    await sendPasswordResetEmail(email, code, token);
   }
 
-  res.json({ message: 'If that email is registered, a reset link has been sent' });
+  // Same response whether or not the account exists — no email enumeration.
+  res.json({ message: 'If that email is registered, a code has been sent' });
+};
+
+export const verifyResetCode = async (req: Request, res: Response): Promise<void> => {
+  const { email, code } = req.body as { email: string; code: string };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !user.reset_code_hash || isVerificationExpired(user.reset_code_expires_at)) {
+    res.status(400).json({ error: 'Invalid email or code', code: 'INVALID_CODE' });
+    return;
+  }
+  if (user.reset_attempts >= MAX_VERIFICATION_ATTEMPTS) {
+    res.status(429).json({ error: 'Too many attempts — request a new code', code: 'TOO_MANY_ATTEMPTS' });
+    return;
+  }
+  if (hashVerificationCode(code, user.id) !== user.reset_code_hash) {
+    await prisma.user.update({ where: { id: user.id }, data: { reset_attempts: { increment: 1 } } });
+    res.status(400).json({ error: 'Incorrect code', code: 'INVALID_CODE' });
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { reset_code_hash: null, reset_code_expires_at: null, reset_attempts: 0 },
+  });
+
+  // Same short-lived token the email link uses, so both paths converge on
+  // the one resetPassword endpoint below.
+  res.json({ token: generateResetToken(user.id) });
 };
 
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
