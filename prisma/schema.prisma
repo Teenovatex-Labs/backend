@@ -30,6 +30,12 @@ model User {
   verification_code_expires_at DateTime?
   verification_attempts        Int       @default(0)
 
+  // Password reset — a separate 6-digit code (+ fallback link, same as
+  // signup) so a reset in progress never collides with signup verification.
+  reset_code_hash       String?
+  reset_code_expires_at DateTime?
+  reset_attempts         Int       @default(0)
+
   projects      Project[]
   votes         Vote[]
   points_log    PointsLog[]
