@@ -1,5 +1,15 @@
 import { Router } from 'express';
-import { register, login, refresh, forgotPassword, resetPassword, logout, googleAuth } from '../controllers/auth.js';
+import {
+  register,
+  login,
+  refresh,
+  forgotPassword,
+  resetPassword,
+  logout,
+  googleAuth,
+  verifyEmail,
+  resendVerification,
+} from '../controllers/auth.js';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
@@ -9,11 +19,15 @@ import {
   forgotPasswordSchema,
   resetPasswordSchema,
   googleAuthSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
 } from '../schemas/auth.js';
 
 const router = Router();
 
 router.post('/register', validate(registerSchema), register);
+router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
+router.post('/resend-verification', validate(resendVerificationSchema), resendVerification);
 router.post('/login', validate(loginSchema), login);
 router.post('/google', validate(googleAuthSchema), googleAuth);
 router.post('/refresh', validate(refreshSchema), refresh);

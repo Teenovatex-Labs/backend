@@ -11,9 +11,32 @@ import {
 } from '../lib/tokens.js';
 import { awardPoints } from '../lib/points.js';
 import { sendPasswordResetEmail } from '../lib/email.js';
+import { sendVerificationEmail } from '../lib/resend.js';
+import {
+  generateVerificationCode,
+  hashVerificationCode,
+  verificationExpiry,
+  isVerificationExpired,
+  isWithinResendCooldown,
+  secondsUntilResendAllowed,
+  MAX_VERIFICATION_ATTEMPTS,
+} from '../lib/verification.js';
 import { slugify, uniqueSlug } from '../lib/slug.js';
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const issueAndSendVerificationCode = async (userId: string, email: string): Promise<void> => {
+  const code = generateVerificationCode();
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      verification_code_hash: hashVerificationCode(code, userId),
+      verification_code_expires_at: verificationExpiry(),
+      verification_attempts: 0,
+    },
+  });
+  await sendVerificationEmail(email, code);
+};
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   const { full_name, username, email, password } = req.body as {
@@ -23,12 +46,42 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     password: string;
   };
 
-  const existing = await prisma.user.findFirst({
-    where: { OR: [{ email }, { username }] },
-  });
-  if (existing) {
-    const field = existing.email === email ? 'Email' : 'Username';
-    res.status(400).json({ error: `${field} already in use`, code: 'DUPLICATE' });
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+
+  if (existingByEmail?.email_verified) {
+    res.status(400).json({ error: 'Email already in use', code: 'DUPLICATE' });
+    return;
+  }
+
+  // An unverified row from an earlier, abandoned signup attempt — refresh
+  // it and resend the code rather than blocking the retry as a duplicate.
+  if (existingByEmail) {
+    const usernameTaken = await prisma.user.findFirst({
+      where: { username, NOT: { id: existingByEmail.id } },
+    });
+    if (usernameTaken) {
+      res.status(400).json({ error: 'Username already in use', code: 'DUPLICATE' });
+      return;
+    }
+
+    const password_hash = await bcrypt.hash(password, 12);
+    const user = await prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: { full_name, username, password_hash },
+    });
+    await issueAndSendVerificationCode(user.id, user.email);
+
+    res.status(201).json({
+      message: 'Check your email for a verification code',
+      email: user.email,
+      require_verification: true,
+    });
+    return;
+  }
+
+  const usernameTaken = await prisma.user.findUnique({ where: { username } });
+  if (usernameTaken) {
+    res.status(400).json({ error: 'Username already in use', code: 'DUPLICATE' });
     return;
   }
 
@@ -36,14 +89,84 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   const user = await prisma.user.create({
     data: { full_name, username, email, password_hash, settings: { create: {} } },
   });
-
-  const tokens = await createSession(user.id, req);
+  await issueAndSendVerificationCode(user.id, user.email);
 
   res.status(201).json({
-    message: 'Registration successful',
-    user: { id: user.id, username: user.username, email: user.email },
-    ...tokens,
+    message: 'Check your email for a verification code',
+    email: user.email,
+    require_verification: true,
   });
+};
+
+export const verifyEmail = async (req: Request, res: Response): Promise<void> => {
+  const { email, code } = req.body as { email: string; code: string };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    res.status(400).json({ error: 'Invalid email or code', code: 'INVALID_CODE' });
+    return;
+  }
+  if (user.email_verified) {
+    res.status(400).json({ error: 'Email already verified', code: 'ALREADY_VERIFIED' });
+    return;
+  }
+  if (!user.verification_code_hash || isVerificationExpired(user.verification_code_expires_at)) {
+    res.status(400).json({ error: 'Code expired — request a new one', code: 'CODE_EXPIRED' });
+    return;
+  }
+  if (user.verification_attempts >= MAX_VERIFICATION_ATTEMPTS) {
+    res.status(429).json({ error: 'Too many attempts — request a new code', code: 'TOO_MANY_ATTEMPTS' });
+    return;
+  }
+
+  if (hashVerificationCode(code, user.id) !== user.verification_code_hash) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { verification_attempts: { increment: 1 } },
+    });
+    res.status(400).json({ error: 'Incorrect code', code: 'INVALID_CODE' });
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      email_verified: true,
+      verification_code_hash: null,
+      verification_code_expires_at: null,
+      verification_attempts: 0,
+    },
+  });
+
+  const tokens = await createSession(user.id, req);
+  res.json({
+    ...tokens,
+    user: { id: user.id, username: user.username, avatar_url: user.avatar_url },
+  });
+};
+
+export const resendVerification = async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body as { email: string };
+
+  const user = await prisma.user.findUnique({ where: { email } });
+  // Same generic response whether or not the account exists, so this can't
+  // be used to enumerate emails.
+  if (!user || user.email_verified) {
+    res.json({ message: 'If that email needs verifying, a new code has been sent' });
+    return;
+  }
+
+  if (isWithinResendCooldown(user.verification_code_expires_at)) {
+    res.status(429).json({
+      error: 'Please wait before requesting another code',
+      code: 'RESEND_COOLDOWN',
+      retry_after_seconds: secondsUntilResendAllowed(user.verification_code_expires_at),
+    });
+    return;
+  }
+
+  await issueAndSendVerificationCode(user.id, user.email);
+  res.json({ message: 'If that email needs verifying, a new code has been sent' });
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
@@ -63,6 +186,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
   if (!(await bcrypt.compare(password, user.password_hash))) {
     res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+    return;
+  }
+  if (!user.email_verified) {
+    res.status(403).json({
+      error: 'Verify your email before logging in',
+      code: 'EMAIL_NOT_VERIFIED',
+      email: user.email,
+    });
     return;
   }
 
@@ -202,6 +333,9 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
         data: {
           google_id: payload.sub,
           avatar_url: existingByEmail.avatar_url ?? payload.picture ?? null,
+          // Google already verified this address, even if a prior
+          // email/password signup attempt here never finished verifying.
+          email_verified: true,
         },
       });
     } else {
@@ -217,6 +351,7 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
           email: payload.email,
           google_id: payload.sub,
           avatar_url: payload.picture ?? null,
+          email_verified: true,
           settings: { create: {} },
         },
       });

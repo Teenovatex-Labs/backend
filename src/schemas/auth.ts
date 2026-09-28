@@ -26,6 +26,13 @@ export const refreshSchema = z.object({ refresh_token: z.string() });
 
 export const googleAuthSchema = z.object({ id_token: z.string() });
 
+export const verifyEmailSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6).regex(/^\d+$/, 'Code must be 6 digits'),
+});
+
+export const resendVerificationSchema = z.object({ email: z.string().email() });
+
 export const forgotPasswordSchema = z.object({ email: z.string().email() });
 
 export const resetPasswordSchema = z.object({
