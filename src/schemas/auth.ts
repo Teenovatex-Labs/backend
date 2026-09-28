@@ -35,6 +35,11 @@ export const resendVerificationSchema = z.object({ email: z.string().email() });
 
 export const forgotPasswordSchema = z.object({ email: z.string().email() });
 
+export const verifyResetCodeSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6).regex(/^\d+$/, 'Code must be 6 digits'),
+});
+
 export const resetPasswordSchema = z.object({
   token: z.string(),
   new_password: strongPassword,
