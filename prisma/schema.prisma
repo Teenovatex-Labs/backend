@@ -23,6 +23,13 @@ model User {
   created_at    DateTime  @default(now())
   updated_at    DateTime  @updatedAt
 
+  // Email verification — a 6-digit code sent via Resend at signup.
+  // Google accounts skip this (Google already verified the address).
+  email_verified               Boolean   @default(false)
+  verification_code_hash       String?
+  verification_code_expires_at DateTime?
+  verification_attempts        Int       @default(0)
+
   projects      Project[]
   votes         Vote[]
   points_log    PointsLog[]
