@@ -5,24 +5,30 @@ import { prisma } from '../db.js';
 
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
   const { current_password, new_password } = req.body as {
-    current_password: string;
+    current_password?: string;
     new_password: string;
   };
 
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  if (!user.password_hash || !(await bcrypt.compare(current_password, user.password_hash))) {
-    res.status(400).json({ error: 'Current password is incorrect', code: 'INVALID_PASSWORD' });
-    return;
+  if (user.password_hash) {
+    // Already has one (email/password account, or a Google account that
+    // added one before) — must prove they know it.
+    if (!current_password || !(await bcrypt.compare(current_password, user.password_hash))) {
+      res.status(400).json({ error: 'Current password is incorrect', code: 'INVALID_PASSWORD' });
+      return;
+    }
   }
+  // else: Google-only account setting its first password — nothing to
+  // confirm yet, current_password (if sent) is ignored.
 
   await prisma.user.update({
     where: { id: req.userId },
     data: { password_hash: await bcrypt.hash(new_password, 12) },
   });
 
-  res.json({ message: 'Password updated' });
+  res.json({ message: user.password_hash ? 'Password updated' : 'Password set' });
 };
 
 export const getSessions = async (req: AuthRequest, res: Response): Promise<void> => {

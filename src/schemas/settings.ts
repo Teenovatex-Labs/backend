@@ -1,7 +1,10 @@
 import { z } from 'zod';
 
 export const changePasswordSchema = z.object({
-  current_password: z.string().min(1),
+  // Optional: a Google-only account has no password yet, so there's nothing
+  // to confirm the first time one is set. The controller still requires and
+  // verifies it whenever the account already has a password_hash.
+  current_password: z.string().min(1).optional(),
   new_password: z
     .string()
     .min(8)
