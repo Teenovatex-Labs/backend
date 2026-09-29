@@ -15,7 +15,15 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors({ origin: process.env.FRONTEND_URL ?? '*', credentials: true }));
+// FRONTEND_URL can be a comma-separated list — production serves both the
+// apex and www domains, and browsers treat them as distinct origins.
+const allowedOrigins = (process.env.FRONTEND_URL ?? '*').split(',').map((o) => o.trim());
+app.use(
+  cors({
+    origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(globalLimiter);
 
