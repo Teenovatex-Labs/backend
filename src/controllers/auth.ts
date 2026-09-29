@@ -48,6 +48,17 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
 
   if (existingByEmail?.email_verified) {
+    // A real, active account already sits on this email. If it was set up
+    // through Google and never got a password, say so specifically —
+    // otherwise someone who forgot they'd used Google before just sees a
+    // generic wall and can't tell how to get in.
+    if (existingByEmail.google_id && !existingByEmail.password_hash) {
+      res.status(400).json({
+        error: 'This email is linked to a Google account — continue with Google instead',
+        code: 'GOOGLE_ACCOUNT_EXISTS',
+      });
+      return;
+    }
     res.status(400).json({ error: 'Email already in use', code: 'DUPLICATE' });
     return;
   }
@@ -352,7 +363,7 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
-  let payload: { sub: string; email?: string; name?: string; picture?: string } | undefined;
+  let payload: { sub: string; email?: string; email_verified?: boolean; name?: string; picture?: string } | undefined;
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: id_token,
@@ -369,11 +380,28 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     return;
   }
 
+  // Google includes this claim; only a handful of legacy/edge IdP cases
+  // ever send it as false. Treat that as "can't vouch for this address" —
+  // fall through to creating a fresh account rather than linking onto (and
+  // trusting) an existing row by email match.
+  const googleVerifiedEmail = payload.email_verified !== false;
+
   let user = await prisma.user.findUnique({ where: { google_id: payload.sub } });
 
   if (!user) {
-    const existingByEmail = await prisma.user.findUnique({ where: { email: payload.email } });
+    const existingByEmail = googleVerifiedEmail
+      ? await prisma.user.findUnique({ where: { email: payload.email } })
+      : null;
     if (existingByEmail) {
+      // Nobody had confirmed this email yet — the row could be a stranger's
+      // abandoned signup, or someone who registered this address first
+      // hoping to hijack whoever actually owns it once they showed up.
+      // Google's OAuth just proved real ownership, so any password already
+      // sitting on the row can't be trusted: wipe it (and any pending
+      // verification code) rather than leave a stranger's password valid
+      // on what is now this person's account.
+      const hadUnverifiedCredentials = !existingByEmail.email_verified;
+
       user = await prisma.user.update({
         where: { id: existingByEmail.id },
         data: {
@@ -382,6 +410,12 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
           // Google already verified this address, even if a prior
           // email/password signup attempt here never finished verifying.
           email_verified: true,
+          ...(hadUnverifiedCredentials && {
+            password_hash: null,
+            verification_code_hash: null,
+            verification_code_expires_at: null,
+            verification_attempts: 0,
+          }),
         },
       });
     } else {
