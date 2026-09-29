@@ -21,11 +21,28 @@ const getRank = async (points: number) =>
 export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
-    select: { ...publicSelect, email: true, last_login_at: true, updated_at: true, settings: true },
+    select: {
+      ...publicSelect,
+      email: true,
+      last_login_at: true,
+      updated_at: true,
+      settings: true,
+      password_hash: true,
+      google_id: true,
+    },
   });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  res.json({ ...user, rank: await getRank(user.points) });
+  // Never send the hash itself — just whether one exists, so the frontend
+  // can prompt a Google-only account to add a password without another
+  // round trip.
+  const { password_hash, google_id, ...rest } = user;
+  res.json({
+    ...rest,
+    has_password: !!password_hash,
+    has_google: !!google_id,
+    rank: await getRank(user.points),
+  });
 };
 
 export const updateMe = async (req: AuthRequest, res: Response): Promise<void> => {
