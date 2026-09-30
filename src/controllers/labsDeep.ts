@@ -7,6 +7,7 @@ import { assertClean } from '../lib/guard.js';
 import { createNotification } from '../lib/notify.js';
 import { checkBadgesQuietly } from '../lib/badges.js';
 import { notifyMentions } from '../lib/mentions.js';
+import { syncLabChatMember } from './messages.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const author = { select: { username: true, avatar_url: true } } as const;
@@ -299,6 +300,7 @@ export const answerRequest = async (req: AuthRequest, res: Response): Promise<vo
     await tx.labJoinRequest.update({ where: { id: rid }, data: { status: accept ? 'accepted' : 'declined' } });
     if (accept) await tx.labMember.upsert({ where: { lab_id_user_id: { lab_id: lab.id, user_id: request.user_id } }, create: { lab_id: lab.id, user_id: request.user_id }, update: {} });
   });
+  if (accept) await syncLabChatMember(lab.id, request.user_id, true);
   if (accept) checkBadgesQuietly(request.user_id);
   await createNotification(request.user_id, 'join_request', accept ? `You're on the team for ${lab.name}!` : `${lab.name} isn't taking new people right now.`, { link: `/labs/${lab.slug}` });
   res.json({ message: accept ? 'Added to the team' : 'Declined' });
@@ -314,6 +316,7 @@ export const removeMember = async (req: AuthRequest, res: Response): Promise<voi
   if (!isSelf) await requireOwner(lab, req.userId);
   const { count } = await prisma.labMember.deleteMany({ where: { lab_id: lab.id, user_id: target.id } });
   if (count === 0) throw new HttpError(404, 'NOT_FOUND', 'They are not on this team');
+  await syncLabChatMember(lab.id, target.id, false);
   // Their open tasks go back to the pool rather than staying assigned to someone who left.
   await prisma.labTask.updateMany({ where: { lab_id: lab.id, assignee_id: target.id }, data: { assignee_id: null } });
   // Leaving can reopen the door: a fresh request is allowed later.

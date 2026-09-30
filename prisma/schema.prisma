@@ -108,6 +108,7 @@ model Project {
   milestones    LabMilestone[]
   members       LabMember[]
   join_requests LabJoinRequest[]
+  chat          Conversation?
 
   @@map("projects")
 }
@@ -445,10 +446,13 @@ model Reaction {
 model Conversation {
   id         String   @id @default(uuid())
   // The two member ids, sorted and joined, so a pair can only ever have one conversation.
-  pair_key   String   @unique
+  pair_key   String?  @unique
+  // Set for a lab team's shared chat (and then pair_key is empty); one chat per lab.
+  lab_id     String?  @unique
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
 
+  lab      Project?             @relation(fields: [lab_id], references: [id], onDelete: Cascade)
   members  ConversationMember[]
   messages Message[]
 

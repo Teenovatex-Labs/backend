@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as c from '../controllers/labsDeep.js';
+import { openLabChat } from '../controllers/messages.js';
 import { optionalAuth, requireActiveMember, requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { writeLimiter } from '../middleware/rateLimiter.js';
@@ -25,6 +26,7 @@ router.post('/:id/milestones', ...active, validate(createMilestoneSchema), c.cre
 router.patch('/:id/milestones/:mid', ...active, validate(updateMilestoneSchema), c.updateMilestone);
 router.delete('/:id/milestones/:mid', requireAuth, c.deleteMilestone);
 
+router.post('/:id/chat', ...active, openLabChat);
 router.get('/:id/team', optionalAuth, c.getTeam);
 router.post('/:id/join', ...active, writeLimiter, validate(joinRequestSchema), c.requestToJoin);
 router.post('/:id/requests/:rid/accept', requireAuth, c.answerRequest);
