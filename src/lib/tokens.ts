@@ -38,9 +38,9 @@ export const createSession = async (userId: string, req: Request) => {
   const refresh_token = generateRefreshToken(userId);
   const token_hash = hashToken(refresh_token);
 
-  // Refresh tokens last 7 days, so anything older than that can never be used again.
+  // A session that hasn't refreshed for 8 days has an expired token (they last 7), so it can never be used again.
   await prisma.session.deleteMany({
-    where: { user_id: userId, created_at: { lt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) } },
+    where: { user_id: userId, last_active: { lt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) } },
   });
 
   await prisma.session.create({
