@@ -5,11 +5,13 @@ import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 import { dayToDb, localDay } from '../lib/day.js';
 import { AllProvidersFailed, hasProviders } from '../lib/pet/providers.js';
-import { NAPPING, think } from '../lib/pet/brain.js';
+import { NAPPING, think, type Turn } from '../lib/pet/brain.js';
+import { screenText, accountAgeDays } from '../lib/contentFilter.js';
 import { removeVoteFor } from './votes.js';
 import { z } from 'zod';
 
 const MAX_TEXT = 500;
+const MAX_MEMORIES = 10;
 
 const today = async (userId: string) => {
   const me = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
@@ -32,7 +34,7 @@ export const status = async (req: AuthRequest, res: Response): Promise<void> => 
 
 export const brain = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.userId!;
-  const { text, page } = req.body as { text: string; page?: string };
+  const { text, page, history } = req.body as { text: string; page?: string; history?: Turn[] };
 
   if (!config.pet.enabled || !hasProviders()) throw new HttpError(503, 'PET_NAPPING', NAPPING);
 
@@ -56,7 +58,8 @@ export const brain = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     // Only the words they typed, their username and the page they are on are sent. Never other
     // members' content, never email, never anything private.
-    const result = await think({ text, username: me!.username, page });
+    const [context, memories] = await Promise.all([buildContext(userId), prisma.petMemory.findMany({ where: { user_id: userId }, orderBy: { created_at: 'asc' }, take: MAX_MEMORIES })]);
+    const result = await think({ text, username: me!.username, page, context, memories: memories.map((m) => m.text), history });
     res.json({ reply: result.reply, intent: result.intent, remaining_today: Math.max(0, config.pet.dailyLimit - usage.count) });
   } catch (err) {
     // A failed attempt doesn't cost the member one of their daily uses.
@@ -143,4 +146,56 @@ export const undoAction = async (req: AuthRequest, res: Response): Promise<void>
     throw err;
   }
   res.json({ message: 'Undone' });
+};
+
+// --- what Alfred knows ------------------------------------------------------------------------
+
+/** A few facts about the member themselves (never anyone else), so Alfred can be useful without asking. */
+async function buildContext(userId: string): Promise<string> {
+  const now = new Date();
+  const [me, unread, task, event] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { points: true, streak: true } }),
+    prisma.notification.count({ where: { user_id: userId, read: false } }),
+    prisma.labTask.findFirst({
+      where: { status: { not: 'done' }, due_at: { gt: now }, lab: { members: { some: { user_id: userId } } }, OR: [{ assignee_id: userId }, { assignee_id: null }] },
+      orderBy: { due_at: 'asc' },
+      include: { lab: { select: { name: true } } },
+    }),
+    prisma.eventRsvp.findFirst({ where: { user_id: userId, event: { starts_at: { gt: now } } }, orderBy: { event: { starts_at: 'asc' } }, include: { event: { select: { title: true, starts_at: true } } } }),
+  ]);
+  const lines = [`points: ${me?.points ?? 0}, day streak: ${me?.streak ?? 0}, unread notifications: ${unread}`];
+  if (task?.due_at) lines.push(`next task due: "${task.title}" in ${task.lab.name}, ${task.due_at.toISOString().slice(0, 16)}Z`);
+  if (event) lines.push(`next event they're going to: "${event.event.title}", ${event.event.starts_at.toISOString().slice(0, 16)}Z`);
+  return lines.join('\n');
+}
+
+// --- memories ---------------------------------------------------------------------------------
+
+export const listMemories = async (req: AuthRequest, res: Response): Promise<void> => {
+  const items = await prisma.petMemory.findMany({ where: { user_id: req.userId }, orderBy: { created_at: 'asc' }, take: MAX_MEMORIES, select: { id: true, text: true, created_at: true } });
+  res.json({ memories: items, max: MAX_MEMORIES });
+};
+
+export const addMemory = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.userId!;
+  const { text } = req.body as { text: string };
+  // Memories are sent to the AI, so they get the same screening as anything else: no contact details, links or abuse.
+  const me = await prisma.user.findUnique({ where: { id: userId }, select: { created_at: true } });
+  const check = screenText(text, { accountAgeDays: accountAgeDays(me!.created_at) });
+  if (!check.ok && check.code !== 'SELF_HARM') throw new HttpError(422, check.code, check.message);
+  if (!check.ok) throw new HttpError(422, 'SELF_HARM', "That's not something I'll store, but I'm here. Talk to a parent, a teacher or someone you trust.");
+
+  if ((await prisma.petMemory.count({ where: { user_id: userId } })) >= MAX_MEMORIES) {
+    throw new HttpError(409, 'MEMORY_FULL', `I can remember ${MAX_MEMORIES} things. Forget one first.`);
+  }
+  const dup = await prisma.petMemory.findFirst({ where: { user_id: userId, text: { equals: text, mode: 'insensitive' } } });
+  const m = dup ?? (await prisma.petMemory.create({ data: { user_id: userId, text } }));
+  res.status(201).json({ id: m.id, text: m.text, created_at: m.created_at });
+};
+
+export const forgetMemory = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id?: string };
+  const { count } = await prisma.petMemory.deleteMany({ where: { user_id: req.userId, ...(id ? { id } : {}) } });
+  if (id && count === 0) throw new HttpError(404, 'NOT_FOUND', "I don't have that one");
+  res.json({ message: id ? 'Forgotten' : 'Forgot everything', forgotten: count });
 };
