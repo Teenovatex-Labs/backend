@@ -37,6 +37,8 @@ model User {
   timezone         String?
   role             Role      @default(member)
   // A suspended member can still sign in and read, but cannot post, comment, vote or message.
+  // Earned every 7-day streak (max 2). One is spent automatically to save a streak after a missed day.
+  streak_freezes   Int       @default(0)
   suspended_until  DateTime?
   suspended_reason String?
   created_at       DateTime  @default(now())
@@ -75,6 +77,7 @@ model User {
   settings        UserSettings?
   following       Follow[]             @relation("follower")
   followers       Follow[]             @relation("following")
+  userBadges      UserBadge[]
 
   @@map("users")
 }
@@ -131,6 +134,7 @@ enum PointsKind {
   streak
   streak_milestone
   post_tagged
+  quest
   other
 }
 
@@ -598,4 +602,29 @@ model Announcement {
 
   @@index([created_at])
   @@map("announcements")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rewards: badges and the daily quest.
+
+model UserBadge {
+  user_id    String
+  key        String
+  awarded_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, key])
+  @@map("user_badges")
+}
+
+// One quest reward per member per (their own) day.
+model QuestClaim {
+  user_id    String
+  day        DateTime @db.Date
+  key        String
+  claimed_at DateTime @default(now())
+
+  @@id([user_id, day])
+  @@map("quest_claims")
 }
