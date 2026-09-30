@@ -32,12 +32,15 @@ model User {
 
   // Age gate: members must be 13 or older. Only the date is stored (no time), and it is
   // never included in any public profile response.
-  birth_date DateTime? @db.Date
+  birth_date       DateTime? @db.Date
   // IANA name such as "Africa/Lagos"; drives "today" for streaks, votes and reminders.
-  timezone   String?
-  role       Role      @default(member)
-  created_at DateTime  @default(now())
-  updated_at DateTime  @updatedAt
+  timezone         String?
+  role             Role      @default(member)
+  // A suspended member can still sign in and read, but cannot post, comment, vote or message.
+  suspended_until  DateTime?
+  suspended_reason String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
 
   // Email verification — a 6-digit code sent via Resend at signup.
   // Google accounts skip this (Google already verified the address).
@@ -54,14 +57,20 @@ model User {
 
   projects      Project[]
   rsvps         EventRsvp[]
+  posts         Post[]
+  comments      Comment[]
+  reactions     Reaction[]
+  reports_made  Report[]         @relation("reporter")
+  blocks_made   Block[]          @relation("blocker")
+  blocked_by    Block[]          @relation("blocked")
   lessons_done  LessonProgress[]
   votes         Vote[]
   points_log    PointsLog[]
   notifications Notification[]
   sessions      Session[]
   settings      UserSettings?
-  following     Follow[]       @relation("follower")
-  followers     Follow[]       @relation("following")
+  following     Follow[]         @relation("follower")
+  followers     Follow[]         @relation("following")
 
   @@map("users")
 }
@@ -174,7 +183,7 @@ model UserSettings {
 
 // Events are created by moderators and admins; members RSVP.
 model Event {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   title       String
   description String
   starts_at   DateTime
@@ -184,8 +193,8 @@ model Event {
   cover_url   String?
   capacity    Int?
   created_by  String?
-  created_at  DateTime @default(now())
-  updated_at  DateTime @updatedAt
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
 
   rsvps EventRsvp[]
 
@@ -221,15 +230,15 @@ model Track {
 }
 
 model Lesson {
-  id       String  @id @default(uuid())
+  id       String @id @default(uuid())
   track_id String
   slug     String
   title    String
   summary  String
   // Plain text with light formatting: "## Heading", "- bullet", blank line between paragraphs.
   body     String
-  minutes  Int     @default(5)
-  position Int     @default(0)
+  minutes  Int    @default(5)
+  position Int    @default(0)
 
   track    Track            @relation(fields: [track_id], references: [id], onDelete: Cascade)
   progress LessonProgress[]
@@ -248,4 +257,147 @@ model LessonProgress {
 
   @@id([user_id, lesson_id])
   @@map("lesson_progress")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Trust and safety
+
+enum ReportTarget {
+  post
+  comment
+  lab
+  user
+  message
+}
+
+enum ReportReason {
+  bullying
+  inappropriate
+  spam
+  personal_info
+  self_harm
+  unsafe_contact
+  other
+}
+
+enum ReportStatus {
+  open
+  actioned
+  dismissed
+}
+
+model Report {
+  id             String       @id @default(uuid())
+  reporter_id    String
+  target_type    ReportTarget
+  target_id      String
+  // Who the report is about, so repeat offenders show up without joining across content types.
+  target_user_id String?
+  reason         ReportReason
+  details        String?
+  status         ReportStatus @default(open)
+  handled_by     String?
+  handled_at     DateTime?
+  note           String?
+  created_at     DateTime     @default(now())
+
+  reporter User @relation("reporter", fields: [reporter_id], references: [id], onDelete: Cascade)
+
+  @@unique([reporter_id, target_type, target_id])
+  @@index([status, created_at])
+  @@index([target_user_id])
+  @@map("reports")
+}
+
+model Block {
+  blocker_id String
+  blocked_id String
+  created_at DateTime @default(now())
+
+  blocker User @relation("blocker", fields: [blocker_id], references: [id], onDelete: Cascade)
+  blocked User @relation("blocked", fields: [blocked_id], references: [id], onDelete: Cascade)
+
+  @@id([blocker_id, blocked_id])
+  @@map("blocks")
+}
+
+// Every moderator action leaves a line here. Nobody can edit or delete these through the API.
+model AuditLog {
+  id          String   @id @default(uuid())
+  actor_id    String?
+  action      String
+  target_type String?
+  target_id   String?
+  meta        Json?
+  created_at  DateTime @default(now())
+
+  @@index([created_at])
+  @@index([target_type, target_id])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Community
+
+model Space {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String
+  position    Int      @default(0)
+  created_at  DateTime @default(now())
+
+  posts Post[]
+
+  @@map("spaces")
+}
+
+model Post {
+  id             String   @id @default(uuid())
+  space_id       String
+  author_id      String
+  title          String
+  body           String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  // Soft removal: hidden posts stay for moderators and the audit trail but never show to members.
+  hidden         Boolean  @default(false)
+  comment_count  Int      @default(0)
+  reaction_count Int      @default(0)
+
+  space     Space      @relation(fields: [space_id], references: [id], onDelete: Cascade)
+  author    User       @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  comments  Comment[]
+  reactions Reaction[]
+
+  @@index([space_id, created_at])
+  @@index([author_id])
+  @@map("posts")
+}
+
+model Comment {
+  id         String   @id @default(uuid())
+  post_id    String
+  author_id  String
+  body       String
+  created_at DateTime @default(now())
+  hidden     Boolean  @default(false)
+
+  post   Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  author User @relation(fields: [author_id], references: [id], onDelete: Cascade)
+
+  @@index([post_id, created_at])
+  @@map("comments")
+}
+
+model Reaction {
+  user_id    String
+  post_id    String
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, post_id])
+  @@map("reactions")
 }
