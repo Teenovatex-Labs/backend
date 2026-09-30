@@ -38,6 +38,11 @@ export const createSession = async (userId: string, req: Request) => {
   const refresh_token = generateRefreshToken(userId);
   const token_hash = hashToken(refresh_token);
 
+  // Refresh tokens last 7 days, so anything older than that can never be used again.
+  await prisma.session.deleteMany({
+    where: { user_id: userId, created_at: { lt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) } },
+  });
+
   await prisma.session.create({
     data: {
       user_id: userId,
