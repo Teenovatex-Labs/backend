@@ -16,6 +16,10 @@ dotenv.config();
 
 const app = express();
 
+// Behind nginx every request arrives from 127.0.0.1; trusting one proxy hop makes
+// req.ip (and so every rate limiter) key on the real visitor instead.
+app.set('trust proxy', 1);
+
 // FRONTEND_URL can be a comma-separated list — production serves both the
 // apex and www domains, and browsers treat them as distinct origins.
 const allowedOrigins = (process.env.FRONTEND_URL ?? '*').split(',').map((o) => o.trim());
