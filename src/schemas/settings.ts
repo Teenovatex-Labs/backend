@@ -17,6 +17,7 @@ export const updateNotificationsSchema = z.object({
   vote_alerts: z.boolean().optional(),
   contest_updates: z.boolean().optional(),
   public_profile: z.boolean().optional(),
+  ai_chat: z.boolean().optional(),
 });
 
 // Password accounts confirm with their password; Google-only accounts (no password) confirm

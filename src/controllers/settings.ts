@@ -55,12 +55,15 @@ export const revokeSession = async (req: AuthRequest, res: Response): Promise<vo
 };
 
 export const updateNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { email_notifications, vote_alerts, contest_updates, public_profile } = req.body as {
+  const { email_notifications, vote_alerts, contest_updates, public_profile, ai_chat } = req.body as {
     email_notifications?: boolean;
     vote_alerts?: boolean;
     contest_updates?: boolean;
     public_profile?: boolean;
+    ai_chat?: boolean;
   };
+  // Turning the AI on is a consent: remember when. Turning it off clears it.
+  const consent = ai_chat === undefined ? {} : { ai_chat, ai_consented_at: ai_chat ? new Date() : null };
 
   const updated = await prisma.userSettings.upsert({
     where: { user_id: req.userId! },
@@ -70,12 +73,14 @@ export const updateNotifications = async (req: AuthRequest, res: Response): Prom
       ...(vote_alerts !== undefined && { vote_alerts }),
       ...(contest_updates !== undefined && { contest_updates }),
       ...(public_profile !== undefined && { public_profile }),
+      ...consent,
     },
     update: {
       ...(email_notifications !== undefined && { email_notifications }),
       ...(vote_alerts !== undefined && { vote_alerts }),
       ...(contest_updates !== undefined && { contest_updates }),
       ...(public_profile !== undefined && { public_profile }),
+      ...consent,
     },
   });
 
