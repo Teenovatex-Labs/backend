@@ -19,4 +19,8 @@ export const updateNotificationsSchema = z.object({
   public_profile: z.boolean().optional(),
 });
 
-export const deleteAccountSchema = z.object({ password: z.string().min(1) });
+// Password accounts confirm with their password; Google-only accounts (no password) confirm
+// by signing in with Google again, so nobody can delete one with a made-up string.
+export const deleteAccountSchema = z
+  .object({ password: z.string().min(1).optional(), id_token: z.string().min(1).optional() })
+  .refine((v) => v.password || v.id_token, { message: 'Confirm with your password or Google' });

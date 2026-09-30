@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
+import { verifyGoogleToken } from '../lib/google.js';
 
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
   const { current_password, new_password } = req.body as {
@@ -82,14 +83,23 @@ export const updateNotifications = async (req: AuthRequest, res: Response): Prom
 };
 
 export const deleteAccount = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { password } = req.body as { password: string };
+  const { password, id_token } = req.body as { password?: string; id_token?: string };
 
   const user = await prisma.user.findUnique({ where: { id: req.userId } });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  if (user.password_hash && !(await bcrypt.compare(password, user.password_hash))) {
-    res.status(400).json({ error: 'Incorrect password', code: 'INVALID_PASSWORD' });
-    return;
+  if (user.password_hash) {
+    if (!password || !(await bcrypt.compare(password, user.password_hash))) {
+      res.status(400).json({ error: 'Incorrect password', code: 'INVALID_PASSWORD' });
+      return;
+    }
+  } else {
+    // Google-only account: there is no password to check, so ask Google to vouch for them again.
+    const google = id_token ? await verifyGoogleToken(id_token) : null;
+    if (!google || !user.google_id || google.sub !== user.google_id) {
+      res.status(400).json({ error: 'Confirm with Google to delete your account', code: 'GOOGLE_CONFIRMATION_REQUIRED' });
+      return;
+    }
   }
 
   await prisma.user.delete({ where: { id: req.userId } });
