@@ -19,3 +19,17 @@ export const suspendSchema = z.object({
 });
 
 export const roleSchema = z.object({ role: z.enum(['member', 'mentor', 'moderator', 'admin']) });
+
+const slug = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lowercase letters, numbers and dashes').min(2).max(60);
+
+export const trackSchema = z.object({ slug, title: z.string().trim().min(2).max(120), description: z.string().trim().min(5).max(500), published: z.boolean().optional() });
+export const trackUpdateSchema = trackSchema.partial().extend({ position: z.number().int().min(0).max(1000).optional() });
+
+export const lessonSchema = z.object({
+  slug,
+  title: z.string().trim().min(2).max(120),
+  summary: z.string().trim().min(2).max(200),
+  body: z.string().min(20).max(20000),
+  minutes: z.number().int().min(1).max(120).optional(),
+});
+export const lessonUpdateSchema = lessonSchema.partial().extend({ position: z.number().int().min(0).max(1000).optional() });
