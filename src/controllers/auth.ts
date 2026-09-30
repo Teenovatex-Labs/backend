@@ -12,7 +12,7 @@ import {
   generateResetToken,
   verifyResetToken,
 } from '../lib/tokens.js';
-import { awardPoints } from '../lib/points.js';
+import { recordDailyLogin } from '../lib/streak.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/resend.js';
 import {
   generateVerificationCode,
@@ -162,6 +162,8 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
     },
   });
 
+  await recordDailyLogin(user);
+
   const tokens = await createSession(user.id, req);
   res.json({
     ...tokens,
@@ -221,34 +223,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  let newStreak = 1;
-  let streakPoints = 3;
-
-  if (user.last_login_at) {
-    const last = new Date(user.last_login_at);
-    if (last.toDateString() === now.toDateString()) {
-      newStreak = user.streak;
-      streakPoints = 0;
-    } else if (last.toDateString() === yesterday.toDateString()) {
-      newStreak = user.streak + 1;
-    }
-  }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { last_login_at: now, streak: newStreak },
-  });
-
-  if (streakPoints > 0) {
-    await awardPoints(user.id, streakPoints, 'Daily login streak');
-    if (newStreak > 0 && newStreak % 7 === 0) {
-      await awardPoints(user.id, 25, `${newStreak}-day streak milestone!`);
-    }
-  }
+  await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
 
@@ -448,6 +423,8 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
       });
     }
   }
+
+  await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
 
