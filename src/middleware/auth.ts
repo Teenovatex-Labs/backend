@@ -52,9 +52,15 @@ export const requireRole =
     next();
   };
 
-/** Posting, voting and other public actions wait until the member has confirmed their age. */
-export const requireAgeConfirmed = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { birth_date: true, username_set: true } });
+/**
+ * Gate for anything a member does in public (posting, commenting, voting, RSVPing, following).
+ * They must have confirmed their age, chosen a username, and not be suspended.
+ */
+export const requireActiveMember = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  const user = await prisma.user.findUnique({
+    where: { id: req.userId },
+    select: { birth_date: true, username_set: true, suspended_until: true, suspended_reason: true },
+  });
   if (!user?.birth_date) {
     res.status(403).json({ error: 'Please confirm your date of birth first', code: 'AGE_REQUIRED' });
     return;
@@ -63,5 +69,16 @@ export const requireAgeConfirmed = async (req: AuthRequest, res: Response, next:
     res.status(403).json({ error: 'Please choose a username first', code: 'USERNAME_REQUIRED' });
     return;
   }
+  if (user.suspended_until && user.suspended_until.getTime() > Date.now()) {
+    res.status(403).json({
+      error: `Your account is paused until ${user.suspended_until.toISOString().slice(0, 10)}. You can still read, but you can't post or vote for now.`,
+      code: 'ACCOUNT_SUSPENDED',
+      suspended_until: user.suspended_until.toISOString(),
+    });
+    return;
+  }
   next();
 };
+
+/** Older name, kept so existing routes keep working. */
+export const requireAgeConfirmed = requireActiveMember;
