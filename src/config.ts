@@ -43,13 +43,15 @@ const buildSchema = (isProduction: boolean) => {
       // Alfred's brain: free-tier providers tried in order, each with any number of keys
       // (comma-separated) so a spare key takes over when one is rate-limited.
       GEMINI_API_KEYS: z.string().optional(),
-      GEMINI_MODEL: z.string().default('gemini-2.0-flash'),
+      GEMINI_MODEL: z.string().default('gemini-flash-lite-latest'),
       GROQ_API_KEYS: z.string().optional(),
-      GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+      GROQ_MODEL: z.string().default('openai/gpt-oss-20b'),
       PET_PROVIDER_ORDER: z.string().default('gemini,groq'),
       PET_DAILY_LIMIT: z.coerce.number().int().positive().default(40),
       // Global kill switch: set to "false" to turn the AI brain off for everyone at once.
       PET_AI_ENABLED: z.string().default('true'),
+      // Comma-separated emails that become admin automatically once they have verified the address.
+      ADMIN_EMAILS: z.string().optional(),
     })
     .refine((c) => c.JWT_SECRET !== c.JWT_REFRESH_SECRET, {
       message: 'JWT_SECRET and JWT_REFRESH_SECRET must be different',
@@ -78,6 +80,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     googleClientId: c.GOOGLE_CLIENT_ID,
     resend: { apiKey: c.RESEND_API_KEY, from: c.RESEND_FROM },
     contactTo: c.CONTACT_TO,
+    adminEmails: splitKeys(c.ADMIN_EMAILS).map((e) => e.toLowerCase()),
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
       dailyLimit: c.PET_DAILY_LIMIT,
