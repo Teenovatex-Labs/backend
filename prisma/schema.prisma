@@ -146,13 +146,16 @@ model Notification {
 }
 
 model Session {
-  id          String   @id @default(uuid())
-  user_id     String
-  token_hash  String   @unique
-  device_info String?
-  ip          String?
-  last_active DateTime @default(now())
-  created_at  DateTime @default(now())
+  id              String    @id @default(uuid())
+  user_id         String
+  token_hash      String    @unique
+  // The token this one replaced, kept briefly so two tabs refreshing at the same moment don't clash.
+  prev_token_hash String?   @unique
+  rotated_at      DateTime?
+  device_info     String?
+  ip              String?
+  last_active     DateTime  @default(now())
+  created_at      DateTime  @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
