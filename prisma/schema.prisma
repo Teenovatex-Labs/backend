@@ -194,11 +194,14 @@ model Follow {
 }
 
 model UserSettings {
-  user_id             String  @id
-  email_notifications Boolean @default(true)
-  vote_alerts         Boolean @default(true)
-  contest_updates     Boolean @default(true)
-  public_profile      Boolean @default(true)
+  user_id             String    @id
+  email_notifications Boolean   @default(true)
+  vote_alerts         Boolean   @default(true)
+  contest_updates     Boolean   @default(true)
+  public_profile      Boolean   @default(true)
+  // Alfred's AI brain sends what you type to Alfred to Google or Groq. Off until the member opts in.
+  ai_chat             Boolean   @default(false)
+  ai_consented_at     DateTime?
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
@@ -571,4 +574,14 @@ model LabJoinRequest {
 
   @@unique([lab_id, user_id])
   @@map("lab_join_requests")
+}
+
+// How many times each member used Alfred's AI brain each day. No message content is stored.
+model PetUsage {
+  user_id String
+  day     DateTime @db.Date
+  count   Int      @default(0)
+
+  @@id([user_id, day])
+  @@map("pet_usage")
 }
