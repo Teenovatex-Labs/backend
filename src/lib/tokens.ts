@@ -18,6 +18,18 @@ export const generateRefreshToken = (userId: string) =>
   // produce identical tokens and collide on the session's unique token_hash.
   jwt.sign({ userId, type: 'refresh' }, REFRESH_SECRET, { expiresIn: '7d', jwtid: crypto.randomUUID() });
 
+/**
+ * The refresh token a session holds after its Nth rotation. It is a pure function of the session
+ * (id, rotation count, rotation time), so the server can hand out the very same token again to
+ * anyone who presents the one before it. That makes rotation safe when a response is lost or two
+ * tabs refresh at once, while a copied old token used later is still caught.
+ */
+export const deriveRefreshToken = (s: { id: string; user_id: string; rotation: number; rotated_at: Date }) =>
+  jwt.sign({ userId: s.user_id, type: 'refresh', iat: Math.floor(s.rotated_at.getTime() / 1000) }, REFRESH_SECRET, {
+    expiresIn: '7d',
+    jwtid: crypto.createHmac('sha256', REFRESH_SECRET).update(`${s.id}:${s.rotation}`).digest('hex').slice(0, 32),
+  });
+
 export const generateResetToken = (userId: string) =>
   jwt.sign({ userId, type: 'reset' }, RESET_SECRET, { expiresIn: '15m' });
 
