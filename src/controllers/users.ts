@@ -3,6 +3,7 @@ import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 import { uploadToCloudinary } from '../middleware/upload.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
+import { createNotification } from '../lib/notify.js';
 
 const publicSelect = {
   id: true,
@@ -90,27 +91,60 @@ export const uploadAvatar = async (
   res.json({ avatar_url });
 };
 
-export const getUserByUsername = async (req: Request, res: Response): Promise<void> => {
+// A member who turned off "public profile" is visible only to themselves.
+const canSeeProfile = (viewerId: string | undefined, owner: { id: string; settings: { public_profile: boolean } | null }) =>
+  viewerId === owner.id || owner.settings?.public_profile !== false;
+
+export const getUserByUsername = async (req: AuthRequest, res: Response): Promise<void> => {
   const { username } = req.params as { username: string };
 
-  const user = await prisma.user.findUnique({ where: { username }, select: publicSelect });
+  const user = await prisma.user.findUnique({
+    where: { username },
+    select: { ...publicSelect, settings: { select: { public_profile: true } }, _count: { select: { followers: true, following: true, projects: true } } },
+  });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
-  res.json({ ...user, rank: await getRank(user.points) });
+  if (!canSeeProfile(req.userId, user)) {
+    // Enough to show a "private" card, nothing more.
+    res.json({ username: user.username, avatar_url: user.avatar_url, private: true });
+    return;
+  }
+
+  const { settings: _settings, _count, ...rest } = user;
+  const is_following = req.userId
+    ? !!(await prisma.follow.findUnique({
+        where: { follower_id_following_id: { follower_id: req.userId, following_id: user.id } },
+      }))
+    : false;
+
+  res.json({
+    ...rest,
+    private: false,
+    rank: await getRank(user.points),
+    followers: _count.followers,
+    following: _count.following,
+    lab_count: _count.projects,
+    is_following,
+  });
 };
 
-export const getUserProjects = async (req: Request, res: Response): Promise<void> => {
+export const getUserProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   const { username } = req.params as { username: string };
 
-  const user = await prisma.user.findUnique({ where: { username }, select: { id: true } });
+  const user = await prisma.user.findUnique({
+    where: { username },
+    select: { id: true, settings: { select: { public_profile: true } } },
+  });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
+  if (!canSeeProfile(req.userId, user)) { res.json({ projects: [] }); return; }
 
   const projects = await prisma.project.findMany({
     where: { user_id: user.id },
     orderBy: { created_at: 'desc' },
+    include: { user: { select: { username: true, avatar_url: true } } },
   });
 
-  res.json(projects);
+  res.json({ projects });
 };
 
 export const followUser = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -122,11 +156,16 @@ export const followUser = async (req: AuthRequest, res: Response): Promise<void>
     return;
   }
 
-  await prisma.follow.upsert({
+  const existing = await prisma.follow.findUnique({
     where: { follower_id_following_id: { follower_id: req.userId!, following_id: target.id } },
-    create: { follower_id: req.userId!, following_id: target.id },
-    update: {},
   });
+  if (!existing) {
+    await prisma.follow.create({ data: { follower_id: req.userId!, following_id: target.id } });
+    const me = await prisma.user.findUnique({ where: { id: req.userId }, select: { username: true } });
+    await createNotification(target.id, 'follow', `@${me?.username} started following you`, {
+      link: `/u/${me?.username}`,
+    });
+  }
 
   res.json({ message: `Following ${username}` });
 };
