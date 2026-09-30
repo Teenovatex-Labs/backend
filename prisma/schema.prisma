@@ -17,6 +17,8 @@ enum Role {
 model User {
   id            String    @id @default(uuid())
   username      String    @unique
+  // False for Google sign-ups until the member picks their own handle (they get a placeholder).
+  username_set  Boolean   @default(true)
   full_name     String
   email         String    @unique
   password_hash String?
