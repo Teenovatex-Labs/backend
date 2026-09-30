@@ -87,13 +87,10 @@ export const castVote = async (req: AuthRequest, res: Response): Promise<void> =
   });
 };
 
-export const removeVote = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { id: project_id } = req.params as { id: string };
-  const userId = req.userId!;
-
+/** Takes back the member's vote on a lab for their current day, and the points it earned. Null if there was none. */
+export const removeVoteFor = async (userId: string, project_id: string): Promise<number | null> => {
   const vote_day = dayToDb(localDay(await timezoneOf(userId)));
-
-  const result = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     const vote = await tx.vote.findUnique({
       where: { user_id_project_id_vote_day: { user_id: userId, project_id, vote_day } },
       include: { project: { select: { user_id: true, name: true } } },
@@ -101,17 +98,18 @@ export const removeVote = async (req: AuthRequest, res: Response): Promise<void>
     if (!vote) return null;
 
     await tx.vote.delete({ where: { id: vote.id } });
-    const updated = await tx.project.update({
-      where: { id: project_id },
-      data: { vote_count: { decrement: 1 } },
-    });
+    const updated = await tx.project.update({ where: { id: project_id }, data: { vote_count: { decrement: 1 } } });
     // Take back exactly what this vote earned the lab's owner.
     if (vote.project.user_id !== userId) {
       await awardPointsTx(tx, vote.project.user_id, 'vote_removed', -VOTE_POINTS, `Vote removed on lab "${vote.project.name}"`, project_id);
     }
     return updated.vote_count;
   });
+};
 
+export const removeVote = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id: project_id } = req.params as { id: string };
+  const result = await removeVoteFor(req.userId!, project_id);
   if (result === null) { res.status(404).json({ error: 'Vote not found', code: 'NOT_FOUND' }); return; }
   res.json({ message: 'Vote removed', new_vote_count: result });
 };
