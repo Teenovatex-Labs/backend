@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { Resend } from 'resend';
 import { renderEmailShell } from './emailTemplate.js';
 
@@ -5,12 +6,12 @@ import { renderEmailShell } from './emailTemplate.js';
 // Gmail SMTP transport in lib/email.ts). Defaults to Resend's own sandbox
 // sender so this works with zero DNS setup; swap RESEND_FROM for a
 // verified domain address for real deliverability.
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const FROM = process.env.RESEND_FROM ?? 'TeenovateX Labs <onboarding@resend.dev>';
+const resend = config.resend.apiKey ? new Resend(config.resend.apiKey) : null;
+const FROM = config.resend.from;
 // FRONTEND_URL is the CORS allow-list (can hold several origins), so links and
 // assets in emails use their own single-origin settings.
-const SITE_URL = process.env.SITE_URL ?? 'https://www.teenovatex.org';
-const APP_URL = process.env.APP_URL ?? 'https://app.teenovatex.org';
+const SITE_URL = config.siteUrl;
+const APP_URL = config.appUrl;
 
 const send = async (to: string, subject: string, html: string, devLabel: string, devExtra: string) => {
   if (!resend) {
@@ -75,7 +76,7 @@ const TOPIC_LABEL: Record<string, string> = {
 
 export const sendContactMessage = async (msg: { name: string; email: string; topic: string; message: string }) => {
   const topic = TOPIC_LABEL[msg.topic] ?? TOPIC_LABEL.other;
-  const inbox = process.env.CONTACT_TO;
+  const inbox = config.contactTo;
 
   if (!resend || !inbox) {
     console.log(`[DEV] Contact message from ${msg.name} <${msg.email}> [${topic}]: ${msg.message}`);

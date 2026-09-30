@@ -1,8 +1,9 @@
+import { config } from '../config.js';
 // Shared HTML shell for every Resend email — same header, mascot, and
 // footer everywhere so a verification code and a password reset still
 // feel like the same product. Uses real hosted PNGs (not the site's SVGs)
 // because Gmail/Outlook don't reliably render inline SVG.
-const SITE_URL = process.env.SITE_URL ?? 'https://www.teenovatex.org';
+const SITE_URL = config.siteUrl;
 const asset = (path: string) => `${SITE_URL}${path}`;
 
 export function renderEmailShell({
