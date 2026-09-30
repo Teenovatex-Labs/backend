@@ -63,6 +63,26 @@ const describeTarget = async (type: string, id: string) => {
       const u = await prisma.user.findUnique({ where: { id }, select: { username: true, bio: true } });
       return u ? { exists: true, title: `@${u.username}`, excerpt: u.bio ?? '', author: u.username } : { exists: false };
     }
+    case 'message': {
+      // Moderators only ever see a private conversation because somebody in it reported it, and
+      // only the few messages around the reported one.
+      const m = await prisma.message.findUnique({ where: { id }, include: { sender: { select: { username: true } } } });
+      if (!m) return { exists: false };
+      const around = await prisma.message.findMany({
+        where: { conversation_id: m.conversation_id, hidden: false, created_at: { gte: new Date(m.created_at.getTime() - 60 * 60_000), lte: new Date(m.created_at.getTime() + 60 * 60_000) } },
+        orderBy: { created_at: 'asc' },
+        take: 12,
+        include: { sender: { select: { username: true } } },
+      });
+      return {
+        exists: true,
+        title: 'Private message',
+        excerpt: m.body.slice(0, 400),
+        author: m.sender.username,
+        hidden: m.hidden,
+        context: around.map((x) => ({ id: x.id, from: x.sender.username, body: x.body.slice(0, 300), reported: x.id === id })),
+      };
+    }
     default:
       return { exists: false };
   }
@@ -126,7 +146,8 @@ export const resolveReport = async (req: AuthRequest, res: Response): Promise<vo
           await tx.comment.update({ where: { id: report.target_id }, data: { hidden: true } });
           await tx.post.update({ where: { id: c.post_id }, data: { comment_count: { decrement: 1 } } });
         }
-      } else if (report.target_type === 'lab') await tx.project.deleteMany({ where: { id: report.target_id } });
+      } else if (report.target_type === 'message') await tx.message.updateMany({ where: { id: report.target_id }, data: { hidden: true } });
+      else if (report.target_type === 'lab') await tx.project.deleteMany({ where: { id: report.target_id } });
       else throw new HttpError(400, 'UNSUPPORTED_ACTION', 'Content of that type can only be warned or suspended');
     }
     if (action === 'suspend' && report.target_user_id) {

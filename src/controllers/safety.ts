@@ -6,7 +6,7 @@ import { HttpError } from '../lib/errors.js';
 type Target = { user_id: string | null };
 
 /** Finds who a piece of content belongs to, and proves it exists. */
-export const resolveTarget = async (type: string, id: string): Promise<Target> => {
+export const resolveTarget = async (type: string, id: string, reporterId?: string): Promise<Target> => {
   switch (type) {
     case 'post': {
       const p = await prisma.post.findUnique({ where: { id }, select: { author_id: true } });
@@ -28,9 +28,15 @@ export const resolveTarget = async (type: string, id: string): Promise<Target> =
       if (!u) throw new HttpError(404, 'NOT_FOUND', 'We could not find that member');
       return { user_id: u.id };
     }
+    case 'message': {
+      const m = await prisma.message.findUnique({ where: { id }, include: { conversation: { include: { members: { select: { user_id: true } } } } } });
+      if (!m) throw new HttpError(404, 'NOT_FOUND', 'That message no longer exists');
+      // Only someone in the conversation can report it: a report is the one way a moderator gets to read it.
+      if (!m.conversation.members.some((x) => x.user_id === reporterId)) throw new HttpError(404, 'NOT_FOUND', 'That message no longer exists');
+      return { user_id: m.sender_id };
+    }
     default:
-      // Direct messages arrive in a later phase; until then there is nothing to report.
-      throw new HttpError(400, 'UNSUPPORTED_TARGET', 'That kind of content cannot be reported yet');
+      throw new HttpError(400, 'UNSUPPORTED_TARGET', 'That kind of content cannot be reported');
   }
 };
 
@@ -43,7 +49,7 @@ export const createReport = async (req: AuthRequest, res: Response): Promise<voi
   };
   const reporter_id = req.userId!;
 
-  const target = await resolveTarget(target_type, target_id);
+  const target = await resolveTarget(target_type, target_id, reporter_id);
   if (target.user_id === reporter_id) throw new HttpError(400, 'SELF_REPORT', "You can't report your own content");
 
   // For a member report, store their id (not the username the app sent).
