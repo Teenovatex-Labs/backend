@@ -14,7 +14,9 @@ export const generateAccessToken = (userId: string) =>
   jwt.sign({ userId, type: 'access' }, ACCESS_SECRET, { expiresIn: '15m' });
 
 export const generateRefreshToken = (userId: string) =>
-  jwt.sign({ userId, type: 'refresh' }, REFRESH_SECRET, { expiresIn: '7d' });
+  // jwtid makes every token unique; without it two sign-ins in the same second
+  // produce identical tokens and collide on the session's unique token_hash.
+  jwt.sign({ userId, type: 'refresh' }, REFRESH_SECRET, { expiresIn: '7d', jwtid: crypto.randomUUID() });
 
 export const generateResetToken = (userId: string) =>
   jwt.sign({ userId, type: 'reset' }, RESET_SECRET, { expiresIn: '15m' });
