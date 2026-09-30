@@ -10,19 +10,20 @@ const PAGE = 50;
 const pairKey = (a: string, b: string) => [a, b].sort().join(':');
 
 /**
- * The only way two members can start talking: they follow each other, and neither has blocked the
- * other. There are no cold messages from strangers.
+ * How two members can start talking: they follow each other, or they are on a lab team together.
+ * Either way neither may have blocked the other. There are no cold messages from strangers.
  */
 export const canMessage = async (a: string, b: string): Promise<boolean> => {
   if (a === b) return false;
-  const [blocked, follows] = await Promise.all([
+  const [blocked, follows, shared] = await Promise.all([
     prisma.block.count({ where: { OR: [{ blocker_id: a, blocked_id: b }, { blocker_id: b, blocked_id: a }] } }),
     prisma.follow.count({ where: { OR: [{ follower_id: a, following_id: b }, { follower_id: b, following_id: a }] } }),
+    prisma.labMember.count({ where: { user_id: a, lab: { members: { some: { user_id: b } } } } }),
   ]);
-  return blocked === 0 && follows === 2;
+  return blocked === 0 && (follows === 2 || shared > 0);
 };
 
-const NOT_CONNECTED = new HttpError(403, 'NOT_CONNECTED', 'You can message someone once you follow each other. Follow them, and ask them to follow you back.');
+const NOT_CONNECTED = new HttpError(403, 'NOT_CONNECTED', 'You can message someone once you follow each other, or when you are on a lab team together.');
 
 /** Loads a conversation only if the member belongs to it, and returns who the other person is. */
 const membership = async (conversationId: string, userId: string) => {
