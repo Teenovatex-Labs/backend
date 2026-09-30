@@ -40,12 +40,24 @@ const buildSchema = (isProduction: boolean) => {
       CLOUDINARY_CLOUD_NAME: z.string().optional(),
       CLOUDINARY_API_KEY: z.string().optional(),
       CLOUDINARY_API_SECRET: z.string().optional(),
+      // Alfred's brain: free-tier providers tried in order, each with any number of keys
+      // (comma-separated) so a spare key takes over when one is rate-limited.
+      GEMINI_API_KEYS: z.string().optional(),
+      GEMINI_MODEL: z.string().default('gemini-2.0-flash'),
+      GROQ_API_KEYS: z.string().optional(),
+      GROQ_MODEL: z.string().default('llama-3.3-70b-versatile'),
+      PET_PROVIDER_ORDER: z.string().default('gemini,groq'),
+      PET_DAILY_LIMIT: z.coerce.number().int().positive().default(40),
+      // Global kill switch: set to "false" to turn the AI brain off for everyone at once.
+      PET_AI_ENABLED: z.string().default('true'),
     })
     .refine((c) => c.JWT_SECRET !== c.JWT_REFRESH_SECRET, {
       message: 'JWT_SECRET and JWT_REFRESH_SECRET must be different',
       path: ['JWT_REFRESH_SECRET'],
     });
 };
+
+const splitKeys = (raw?: string) => (raw ?? '').split(',').map((k) => k.trim()).filter(Boolean);
 
 export const parseConfig = (env: NodeJS.ProcessEnv) => {
   const result = buildSchema(env.NODE_ENV === 'production').safeParse(env);
@@ -66,6 +78,13 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     googleClientId: c.GOOGLE_CLIENT_ID,
     resend: { apiKey: c.RESEND_API_KEY, from: c.RESEND_FROM },
     contactTo: c.CONTACT_TO,
+    pet: {
+      enabled: c.PET_AI_ENABLED !== 'false',
+      dailyLimit: c.PET_DAILY_LIMIT,
+      order: c.PET_PROVIDER_ORDER.split(',').map((x) => x.trim()).filter((x): x is 'gemini' | 'groq' => x === 'gemini' || x === 'groq'),
+      gemini: { keys: splitKeys(c.GEMINI_API_KEYS), model: c.GEMINI_MODEL },
+      groq: { keys: splitKeys(c.GROQ_API_KEYS), model: c.GROQ_MODEL },
+    },
     cloudinary: {
       cloudName: c.CLOUDINARY_CLOUD_NAME,
       apiKey: c.CLOUDINARY_API_KEY,
