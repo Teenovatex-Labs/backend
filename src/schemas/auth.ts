@@ -44,3 +44,14 @@ export const resetPasswordSchema = z.object({
   token: z.string(),
   new_password: strongPassword,
 });
+
+export const CONTACT_TOPICS = ['hello', 'partner', 'sponsor', 'mentor', 'donate', 'press', 'other'] as const;
+
+export const contactSchema = z.object({
+  name: z.string().trim().min(2, 'Tell us your name').max(100),
+  email: z.string().trim().email('Enter a valid email'),
+  topic: z.enum(CONTACT_TOPICS).default('hello'),
+  message: z.string().trim().min(10, 'Say a little more (10 characters minimum)').max(2000),
+  // Honeypot: real people never see or fill this; bots do.
+  website: z.string().max(200).optional(),
+});

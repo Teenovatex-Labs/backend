@@ -37,3 +37,11 @@ export const otpRequestLimiter = rateLimit({
   max: 5,
   message: { error: 'Too many requests — try again later', code: 'RATE_LIMITED' },
 });
+
+// Contact form — every accepted message sends two emails via Resend, so cap
+// it per IP to keep it from being used as a spam relay.
+export const contactLimiter = rateLimit({
+  windowMs: 10 * 60_000,
+  max: 5,
+  message: { error: 'Too many messages — try again in a few minutes', code: 'RATE_LIMITED' },
+});
