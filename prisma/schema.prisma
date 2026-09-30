@@ -116,13 +116,25 @@ model Vote {
   @@map("votes")
 }
 
+// Why points were given or taken. The `reason` text is for people; this is for code.
+enum PointsKind {
+  vote_received
+  vote_removed
+  lesson
+  streak
+  streak_milestone
+  post_tagged
+  other
+}
+
 model PointsLog {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   user_id      String
   points       Int
   reason       String
+  kind         PointsKind @default(other)
   reference_id String?
-  created_at   DateTime @default(now())
+  created_at   DateTime   @default(now())
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
