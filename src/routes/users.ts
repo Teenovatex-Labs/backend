@@ -5,8 +5,6 @@ import {
   uploadAvatar,
   getUserByUsername,
   getUserProjects,
-  followUser,
-  unfollowUser,
   setBirthDate,
   setUsername,
 } from '../controllers/users.js';
@@ -25,7 +23,5 @@ router.post('/me/birth-date', requireAuth, validate(setBirthDateSchema), setBirt
 router.post('/me/avatar', requireAuth, writeLimiter, upload.single('avatar'), uploadAvatar);
 router.get('/:username', optionalAuth, getUserByUsername);
 router.get('/:username/projects', optionalAuth, getUserProjects);
-router.post('/:username/follow', requireAuth, followUser);
-router.delete('/:username/follow', requireAuth, unfollowUser);
 
 export default router;

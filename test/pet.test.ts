@@ -124,7 +124,7 @@ describe('what the model is never allowed to make Alfred do', () => {
     ['sign out', { kind: 'signout' }],
     ['delete the account', { kind: 'delete_account' }],
     ['go to a made-up page', { kind: 'go', to: 'admin' }],
-    ['follow a malformed username', { kind: 'follow', username: 'x; DROP TABLE users', undo: false }],
+    ['follow someone (there is no following here)', { kind: 'follow', username: 'sam_builds', undo: false }],
     ['send a message', { kind: 'send_message', to: 'sam', body: 'hi' }],
     ['a vote with no lab', { kind: 'vote' }],
   ])('drops an intent to %s, keeping only the words', async (_name, intent) => {
@@ -137,9 +137,9 @@ describe('what the model is never allowed to make Alfred do', () => {
   });
 
   it('accepts the allowed write intents (which the app still confirms with the member)', async () => {
-    stubProviders(() => gemini(say('On it.', { kind: 'follow', username: 'sam_builds', undo: false })));
+    stubProviders(() => gemini(say('On it.', { kind: 'vote', query: 'Sam Lab' })));
     const me = await optedIn();
-    expect((await ask(me.auth)).body.intent).toEqual({ kind: 'follow', username: 'sam_builds', undo: false });
+    expect((await ask(me.auth)).body.intent).toEqual({ kind: 'vote', query: 'Sam Lab' });
   });
 
   it('will not repeat links or contact details in what Alfred says', async () => {

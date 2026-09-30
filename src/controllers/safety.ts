@@ -85,10 +85,6 @@ export const blockUser = async (req: AuthRequest, res: Response): Promise<void> 
       create: { blocker_id: req.userId!, blocked_id: target.id },
       update: {},
     }),
-    // Blocking cuts the connection both ways.
-    prisma.follow.deleteMany({
-      where: { OR: [{ follower_id: req.userId, following_id: target.id }, { follower_id: target.id, following_id: req.userId }] },
-    }),
   ]);
   res.json({ message: `You blocked @${target.username}. You won't see each other's posts.` });
 };

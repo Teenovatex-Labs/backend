@@ -69,7 +69,6 @@ describe('live updates', () => {
   it('pushes new chat messages to the other person only', async () => {
     const a = await makeUser({ created_at: new Date(Date.now() - 30 * 86400000) });
     const b = await makeUser({ created_at: new Date(Date.now() - 30 * 86400000) });
-    await prisma.follow.createMany({ data: [{ follower_id: a.user.id, following_id: b.user.id }, { follower_id: b.user.id, following_id: a.user.id }] });
     const { body: c } = await request(app).post('/api/v1/messages/conversations').set(a.auth).send({ username: b.user.username });
     const forB = await listen(b.auth);
     const forA = await listen(a.auth);

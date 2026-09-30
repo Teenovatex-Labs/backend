@@ -168,14 +168,12 @@ describe('teams', () => {
     expect(team.body.members).toEqual([expect.objectContaining({ username: me.user.username, role: 'owner' })]);
   });
 
-  it('lets teammates message each other without following', async () => {
+  it('lets teammates message each other', async () => {
     const { owner, lab } = await setup();
     const mate = await makeUser(old);
     await prisma.labMember.create({ data: { lab_id: lab.id, user_id: mate.user.id } });
     const open = await request(app).post('/api/v1/messages/conversations').set(owner.auth).send({ username: mate.user.username });
     expect(open.status).toBe(200);
-    const stranger = await makeUser(old);
-    expect((await request(app).post('/api/v1/messages/conversations').set(owner.auth).send({ username: stranger.user.username })).status).toBe(403);
   });
 });
 

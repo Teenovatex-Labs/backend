@@ -9,37 +9,23 @@ beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 
 const old = { created_at: new Date(Date.now() - 30 * 86400000) };
-const follow = async (a: { auth: Record<string, string> }, b: { user: { username: string } }) =>
-  request(app).post(`/api/v1/users/${b.user.username}/follow`).set(a.auth);
-const friends = async () => {
-  const a = await makeUser(old);
-  const b = await makeUser(old);
-  await follow(a, b);
-  await follow(b, a);
-  return { a, b };
-};
+const friends = async () => ({ a: await makeUser(old), b: await makeUser(old) });
 const open = (from: { auth: Record<string, string> }, to: { user: { username: string } }) =>
   request(app).post('/api/v1/messages/conversations').set(from.auth).send({ username: to.user.username });
 const send = (from: { auth: Record<string, string> }, id: string, body: string) =>
   request(app).post(`/api/v1/messages/conversations/${id}/messages`).set(from.auth).send({ body });
 
 describe('who can message whom', () => {
-  it('refuses strangers, and one-way follows', async () => {
+  it('lets anyone message anyone by username, with no follow step', async () => {
     const a = await makeUser(old);
     const b = await makeUser(old);
-    const cold = await open(a, b);
-    expect(cold.status).toBe(403);
-    expect(cold.body.code).toBe('NOT_CONNECTED');
-
-    await follow(a, b); // only one way
-    expect((await open(a, b)).status).toBe(403);
-    expect((await open(b, a)).status).toBe(403);
+    expect((await open(a, b)).status).toBe(200);
+    expect((await open(b, a)).status).toBe(200);
   });
 
-  it('allows mutual followers, and always returns the same conversation for a pair', async () => {
+  it('always returns the same conversation for a pair', async () => {
     const { a, b } = await friends();
     const first = await open(a, b);
-    expect(first.status).toBe(200);
     const again = await open(b, a);
     expect(again.body.id).toBe(first.body.id);
     expect(await prisma.conversation.count()).toBe(1);
@@ -51,12 +37,12 @@ describe('who can message whom', () => {
     expect((await request(app).post('/api/v1/messages/conversations').set(a.auth).send({ username: 'nobody_here' })).status).toBe(404);
   });
 
-  it('stops the moment someone blocks or unfollows', async () => {
+  it('stops the moment someone blocks', async () => {
     const { a, b } = await friends();
     const { body: c } = await open(a, b);
     expect((await send(a, c.id, 'hello')).status).toBe(201);
 
-    await request(app).delete(`/api/v1/users/${a.user.username}/follow`).set(b.auth); // b unfollows a
+    await prisma.block.create({ data: { blocker_id: b.user.id, blocked_id: a.user.id } });
     const blocked = await send(a, c.id, 'still there?');
     expect(blocked.status).toBe(403);
     expect(blocked.body.code).toBe('NOT_CONNECTED');
@@ -64,10 +50,11 @@ describe('who can message whom', () => {
     expect((await request(app).get(`/api/v1/messages/conversations/${c.id}`).set(a.auth)).body.can_message).toBe(false);
   });
 
-  it('is closed to blocked members even if they still follow each other', async () => {
+  it('is closed to blocked members from either side', async () => {
     const { a, b } = await friends();
     await prisma.block.create({ data: { blocker_id: a.user.id, blocked_id: b.user.id } });
     expect((await open(b, a)).status).toBe(403);
+    expect((await open(a, b)).status).toBe(403);
   });
 });
 
@@ -144,8 +131,6 @@ describe('safety in messages', () => {
   it('blocks links from brand-new accounts', async () => {
     const a = await makeUser();
     const b = await makeUser();
-    await follow(a, b);
-    await follow(b, a);
     const { body: c } = await open(a, b);
     expect((await send(a, c.id, 'see https://example.com')).body.code).toBe('LINKS_NOT_ALLOWED');
   });

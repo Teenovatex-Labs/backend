@@ -18,12 +18,11 @@ export const BADGES: BadgeDef[] = [
   { key: 'loved_10', title: 'Crowd Favourite', description: 'Your labs have 10 votes between them', symbol: '10' },
   { key: 'team_player', title: 'Team Player', description: 'Joined someone else’s lab team', symbol: '+' },
   { key: 'milestone', title: 'Finisher', description: 'Reached a milestone', symbol: '⚑' },
-  { key: 'friend', title: 'Connected', description: 'Made a mutual follow', symbol: '∞' },
 ];
 
 /** Which badge keys this member currently qualifies for, from real data. */
 async function qualifying(userId: string): Promise<Set<string>> {
-  const [user, labs, votes, posts, comments, updates, lessons, tracks, teamJoins, milestones, following, followers, voteSum] = await Promise.all([
+  const [user, labs, votes, posts, comments, updates, lessons, tracks, teamJoins, milestones, voteSum] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { streak: true } }),
     prisma.project.count({ where: { user_id: userId } }),
     prisma.vote.count({ where: { user_id: userId } }),
@@ -34,15 +33,11 @@ async function qualifying(userId: string): Promise<Set<string>> {
     prisma.track.findMany({ where: { published: true }, select: { id: true, lessons: { select: { id: true } } } }),
     prisma.labMember.count({ where: { user_id: userId, role: 'member' } }),
     prisma.labMilestone.count({ where: { done_at: { not: null }, lab: { members: { some: { user_id: userId } } } } }),
-    prisma.follow.findMany({ where: { follower_id: userId }, select: { following_id: true } }),
-    prisma.follow.findMany({ where: { following_id: userId }, select: { follower_id: true } }),
     prisma.project.aggregate({ where: { user_id: userId }, _sum: { vote_count: true } }),
   ]);
 
   const done = new Set((await prisma.lessonProgress.findMany({ where: { user_id: userId }, select: { lesson_id: true } })).map((l) => l.lesson_id));
   const finishedTrack = tracks.some((t) => t.lessons.length > 0 && t.lessons.every((l) => done.has(l.id)));
-  const followed = new Set(following.map((f) => f.following_id));
-  const mutual = followers.some((f) => followed.has(f.follower_id));
   const streak = user?.streak ?? 0;
 
   const earned = new Set<string>();
@@ -57,7 +52,6 @@ async function qualifying(userId: string): Promise<Set<string>> {
   if ((voteSum._sum.vote_count ?? 0) >= 10) earned.add('loved_10');
   if (teamJoins > 0) earned.add('team_player');
   if (milestones > 0) earned.add('milestone');
-  if (mutual) earned.add('friend');
   return earned;
 }
 

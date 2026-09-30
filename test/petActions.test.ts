@@ -17,11 +17,11 @@ describe('What Alfred did', () => {
   it('lists the member’s own actions, newest first, with whether they can still be undone', async () => {
     const me = await makeUser();
     const other = await makeUser();
-    await log(me.auth, { kind: 'follow', summary: 'Followed @sam', payload: { username: 'sam_builds' } });
-    await log(other.auth, { kind: 'follow', summary: 'Followed @x', payload: { username: 'xxx_yyy' } });
+    await log(me.auth, { kind: 'vote', summary: 'Voted for Sam', payload: { lab_id: 'lab_1' } });
+    await log(other.auth, { kind: 'vote', summary: 'Voted for X', payload: { lab_id: 'lab_2' } });
     await log(me.auth, { kind: 'readall', summary: 'Marked 2 notifications read', payload: { ids: ['a', 'b'] } });
     const res = await request(app).get('/api/v1/pet/actions').set(me.auth);
-    expect(res.body.actions.map((a: { summary: string }) => a.summary)).toEqual(['Marked 2 notifications read', 'Followed @sam']);
+    expect(res.body.actions.map((a: { summary: string }) => a.summary)).toEqual(['Marked 2 notifications read', 'Voted for Sam']);
     expect(res.body.actions.every((a: { can_undo: boolean }) => a.can_undo)).toBe(true);
     expect(res.body.undo_window_minutes).toBe(15);
   });
@@ -29,29 +29,10 @@ describe('What Alfred did', () => {
   it('only accepts reversible kinds with well-formed payloads', async () => {
     const me = await makeUser();
     expect((await log(me.auth, { kind: 'delete_account', summary: 'x', payload: {} })).status).toBe(400);
-    expect((await log(me.auth, { kind: 'follow', summary: 'x', payload: { username: 'bad name!' } })).status).toBe(400);
+    expect((await log(me.auth, { kind: 'follow', summary: 'x', payload: { username: 'sam_builds' } })).status).toBe(400); // follows no longer exist
+    expect((await log(me.auth, { kind: 'vote', summary: 'x', payload: {} })).status).toBe(400);
     expect((await log(me.auth, { kind: 'readall', summary: 'x', payload: { ids: Array(101).fill('a') } })).status).toBe(400);
     expect((await request(app).post('/api/v1/pet/actions').send({})).status).toBe(401);
-  });
-
-  it('undoes a follow', async () => {
-    const me = await makeUser();
-    const friend = await makeUser();
-    await request(app).post(`/api/v1/users/${friend.user.username}/follow`).set(me.auth);
-    const { body } = await log(me.auth, { kind: 'follow', summary: 'Followed', payload: { username: friend.user.username } });
-    expect((await undo(me.auth, body.id)).status).toBe(200);
-    expect(await prisma.follow.count()).toBe(0);
-    expect((await undo(me.auth, body.id)).body.code).toBe('ALREADY_UNDONE');
-    const listed = await request(app).get('/api/v1/pet/actions').set(me.auth);
-    expect(listed.body.actions[0]).toMatchObject({ undone: true, can_undo: false });
-  });
-
-  it('undoes an unfollow by following again', async () => {
-    const me = await makeUser();
-    const friend = await makeUser();
-    const { body } = await log(me.auth, { kind: 'unfollow', summary: 'Unfollowed', payload: { username: friend.user.username } });
-    await undo(me.auth, body.id);
-    expect(await prisma.follow.count({ where: { follower_id: me.user.id, following_id: friend.user.id } })).toBe(1);
   });
 
   it('undoes a vote, and takes the owner’s points back', async () => {
@@ -80,8 +61,7 @@ describe('What Alfred did', () => {
   it('cannot be undone after the window, or by someone else', async () => {
     const me = await makeUser();
     const other = await makeUser();
-    const friend = await makeUser();
-    const { body } = await log(me.auth, { kind: 'follow', summary: 'Followed', payload: { username: friend.user.username } });
+    const { body } = await log(me.auth, { kind: 'readall', summary: 'Marked read', payload: { ids: [] } });
     expect((await undo(other.auth, body.id)).status).toBe(404);
     await prisma.petAction.update({ where: { id: body.id }, data: { created_at: new Date(Date.now() - UNDO_WINDOW_MS - 1000) } });
     const late = await undo(me.auth, body.id);

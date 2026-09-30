@@ -12,20 +12,17 @@ const PAGE = 50;
 const pairKey = (a: string, b: string) => [a, b].sort().join(':');
 
 /**
- * How two members can start a private chat: they follow each other, or they are on a lab team
- * together. Either way neither may have blocked the other. There are no cold messages from strangers.
+ * Anyone can message anyone who shares their username, unless either has blocked the other. Nobody
+ * is ranked above anybody else here, so there is no follow step and no popularity gate. Blocks, the
+ * content filter, reports and suspensions are what keep it safe.
  */
 export const canMessage = async (a: string, b: string): Promise<boolean> => {
   if (a === b) return false;
-  const [blocked, follows, shared] = await Promise.all([
-    prisma.block.count({ where: { OR: [{ blocker_id: a, blocked_id: b }, { blocker_id: b, blocked_id: a }] } }),
-    prisma.follow.count({ where: { OR: [{ follower_id: a, following_id: b }, { follower_id: b, following_id: a }] } }),
-    prisma.labMember.count({ where: { user_id: a, lab: { members: { some: { user_id: b } } } } }),
-  ]);
-  return blocked === 0 && (follows === 2 || shared > 0);
+  const blocked = await prisma.block.count({ where: { OR: [{ blocker_id: a, blocked_id: b }, { blocker_id: b, blocked_id: a }] } });
+  return blocked === 0;
 };
 
-const NOT_CONNECTED = new HttpError(403, 'NOT_CONNECTED', 'You can message someone once you follow each other, or when you are on a lab team together.');
+const NOT_CONNECTED = new HttpError(403, 'NOT_CONNECTED', "You can't message this person.");
 
 const person = { select: { id: true, username: true, avatar_url: true } } as const;
 
@@ -198,7 +195,7 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
   const userId = req.userId!;
   const { convo, other } = await membership(id, userId);
 
-  // Checked on every send, not just when the chat was opened: a block or an unfollow ends a private
+  // Checked on every send, not just when the chat was opened: a block ends a private
   // chat. A team chat needs no check here because membership itself is the permission.
   if (other && !(await canMessage(userId, other.id))) throw NOT_CONNECTED;
 

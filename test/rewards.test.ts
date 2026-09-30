@@ -65,11 +65,10 @@ describe('badges', () => {
     const theirLab = await makeProject(other.user.id);
     await prisma.labMember.create({ data: { lab_id: theirLab.id, user_id: me.user.id } });
     await prisma.labMilestone.create({ data: { lab_id: theirLab.id, title: 'Done', done_at: new Date() } });
-    await prisma.follow.createMany({ data: [{ follower_id: me.user.id, following_id: other.user.id }, { follower_id: other.user.id, following_id: me.user.id }] });
     await makeProject(me.user.id, { vote_count: 10 });
 
     await checkBadges(me.user.id);
-    expect(await badgeKeys(me.user.id)).toEqual(['first_comment', 'first_lab', 'first_lesson', 'friend', 'loved_10', 'milestone', 'streak_3', 'streak_7', 'team_player', 'track_done']);
+    expect(await badgeKeys(me.user.id)).toEqual(['first_comment', 'first_lab', 'first_lesson', 'loved_10', 'milestone', 'streak_3', 'streak_7', 'team_player', 'track_done']);
   });
 
   it('are listed for the member, earned or not', async () => {

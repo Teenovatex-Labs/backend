@@ -75,8 +75,6 @@ export const UNDO_WINDOW_MS = 15 * 60_000;
 
 // Only actions that can be safely reversed are logged: what they do, and what it takes to put it back.
 export const petActionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('follow'), summary: z.string().trim().min(1).max(140), payload: z.object({ username: z.string().regex(/^[a-zA-Z0-9_]{3,30}$/) }) }),
-  z.object({ kind: z.literal('unfollow'), summary: z.string().trim().min(1).max(140), payload: z.object({ username: z.string().regex(/^[a-zA-Z0-9_]{3,30}$/) }) }),
   z.object({ kind: z.literal('vote'), summary: z.string().trim().min(1).max(140), payload: z.object({ lab_id: z.string().min(1).max(60) }) }),
   z.object({ kind: z.literal('readall'), summary: z.string().trim().min(1).max(140), payload: z.object({ ids: z.array(z.string().min(1).max(60)).max(100) }) }),
 ]);
@@ -109,29 +107,13 @@ export const undoAction = async (req: AuthRequest, res: Response): Promise<void>
   if (a.undone_at) throw new HttpError(409, 'ALREADY_UNDONE', 'That was already undone');
   if (Date.now() - a.created_at.getTime() > UNDO_WINDOW_MS) throw new HttpError(410, 'TOO_LATE', `Undo only works for ${UNDO_WINDOW_MS / 60_000} minutes after Alfred does something`);
 
-  const p = (a.payload ?? {}) as { username?: string; lab_id?: string; ids?: string[] };
+  const p = (a.payload ?? {}) as { lab_id?: string; ids?: string[] };
   // Claim the undo first (atomically), so two clicks can't both run it.
   const claimed = await prisma.petAction.updateMany({ where: { id, undone_at: null }, data: { undone_at: new Date() } });
   if (claimed.count === 0) throw new HttpError(409, 'ALREADY_UNDONE', 'That was already undone');
 
   try {
     switch (a.kind) {
-      case 'follow': {
-        const target = await prisma.user.findUnique({ where: { username: p.username ?? '' }, select: { id: true } });
-        if (target) await prisma.follow.deleteMany({ where: { follower_id: userId, following_id: target.id } });
-        break;
-      }
-      case 'unfollow': {
-        const target = await prisma.user.findUnique({ where: { username: p.username ?? '' }, select: { id: true } });
-        if (target && target.id !== userId) {
-          await prisma.follow.upsert({
-            where: { follower_id_following_id: { follower_id: userId, following_id: target.id } },
-            create: { follower_id: userId, following_id: target.id },
-            update: {},
-          });
-        }
-        break;
-      }
       case 'vote':
         if (p.lab_id) await removeVoteFor(userId, p.lab_id); // only the vote from their current day can be taken back
         break;

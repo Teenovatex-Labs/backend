@@ -110,7 +110,7 @@ export const getUserByUsername = async (req: AuthRequest, res: Response): Promis
 
   const user = await prisma.user.findUnique({
     where: { username },
-    select: { ...publicSelect, settings: { select: { public_profile: true } }, _count: { select: { followers: true, following: true, projects: true } } },
+    select: { ...publicSelect, settings: { select: { public_profile: true } }, _count: { select: { projects: true } } },
   });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
 
@@ -121,30 +121,16 @@ export const getUserByUsername = async (req: AuthRequest, res: Response): Promis
   }
 
   const { settings: _settings, _count, ...rest } = user;
-  const is_following = req.userId
-    ? !!(await prisma.follow.findUnique({
-        where: { follower_id_following_id: { follower_id: req.userId, following_id: user.id } },
-      }))
-    : false;
-
-  const follows_you = req.userId
-    ? !!(await prisma.follow.findUnique({ where: { follower_id_following_id: { follower_id: user.id, following_id: req.userId } } }))
-    : false;
-
   res.json({
     ...rest,
     private: false,
-    follows_you,
     level: levelFor(user.points),
     badges: (await prisma.userBadge.findMany({ where: { user_id: user.id }, orderBy: { awarded_at: 'asc' } })).flatMap((b) => {
       const def = BADGES.find((d) => d.key === b.key);
       return def ? [{ key: def.key, title: def.title, description: def.description, symbol: def.symbol, awarded_at: b.awarded_at }] : [];
     }),
     rank: await getRank(user.points),
-    followers: _count.followers,
-    following: _count.following,
     lab_count: _count.projects,
-    is_following,
   });
 };
 
@@ -165,43 +151,6 @@ export const getUserProjects = async (req: AuthRequest, res: Response): Promise<
   });
 
   res.json({ projects });
-};
-
-export const followUser = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { username } = req.params as { username: string };
-  const target = await prisma.user.findUnique({ where: { username }, select: { id: true } });
-  if (!target) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
-  if (target.id === req.userId) {
-    res.status(400).json({ error: 'Cannot follow yourself', code: 'INVALID' });
-    return;
-  }
-
-  const existing = await prisma.follow.findUnique({
-    where: { follower_id_following_id: { follower_id: req.userId!, following_id: target.id } },
-  });
-  if (!existing) {
-    await prisma.follow.create({ data: { follower_id: req.userId!, following_id: target.id } });
-    const me = await prisma.user.findUnique({ where: { id: req.userId }, select: { username: true } });
-    await createNotification(target.id, 'follow', `@${me?.username} started following you`, {
-      link: `/u/${me?.username}`,
-    });
-    checkBadgesQuietly(req.userId);
-    checkBadgesQuietly(target.id);
-  }
-
-  res.json({ message: `Following ${username}` });
-};
-
-export const unfollowUser = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { username } = req.params as { username: string };
-  const target = await prisma.user.findUnique({ where: { username }, select: { id: true } });
-  if (!target) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
-
-  await prisma.follow.deleteMany({
-    where: { follower_id: req.userId, following_id: target.id },
-  });
-
-  res.json({ message: `Unfollowed ${username}` });
 };
 
 // For accounts created before the age gate (and Google sign-ups): set once, never edited

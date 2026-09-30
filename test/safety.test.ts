@@ -45,14 +45,11 @@ describe('reporting', () => {
 });
 
 describe('blocking', () => {
-  it('blocks, lists, unblocks, and cuts follows both ways', async () => {
+  it('blocks, lists and unblocks', async () => {
     const a = await makeUser();
     const b = await makeUser();
-    await request(app).post(`/api/v1/users/${b.user.username}/follow`).set(a.auth);
-    await request(app).post(`/api/v1/users/${a.user.username}/follow`).set(b.auth);
 
     expect((await request(app).post(`/api/v1/blocks/${b.user.username}`).set(a.auth)).status).toBe(200);
-    expect(await prisma.follow.count()).toBe(0);
 
     const list = await request(app).get('/api/v1/blocks').set(a.auth);
     expect(list.body.blocks.map((x: { username: string }) => x.username)).toEqual([b.user.username]);

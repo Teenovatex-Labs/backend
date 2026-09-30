@@ -9,29 +9,25 @@ beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 
 describe('public profiles', () => {
-  it('shows counts, rank and whether I follow them', async () => {
+  it('shows lab count and rank, and no follower numbers', async () => {
     const star = await makeUser({ points: 50 });
     const fan = await makeUser();
     await makeProject(star.user.id);
 
-    await request(app).post(`/api/v1/users/${star.user.username}/follow`).set(fan.auth);
     const res = await request(app).get(`/api/v1/users/${star.user.username}`).set(fan.auth);
-    expect(res.body).toMatchObject({ followers: 1, following: 0, lab_count: 1, is_following: true, rank: 1, private: false });
+    expect(res.body).toMatchObject({ lab_count: 1, rank: 1, private: false });
+    expect(res.body).not.toHaveProperty('followers');
+    expect(res.body).not.toHaveProperty('following');
+    expect(res.body).not.toHaveProperty('is_following');
     expect(res.body.birth_date).toBeUndefined();
     expect(res.body.email).toBeUndefined();
 
-    const anon = await request(app).get(`/api/v1/users/${star.user.username}`);
-    expect(anon.body.is_following).toBe(false);
   });
 
-  it('tells a member when someone follows them, once', async () => {
+  it('has no follow endpoint at all', async () => {
     const star = await makeUser();
     const fan = await makeUser();
-    await request(app).post(`/api/v1/users/${star.user.username}/follow`).set(fan.auth);
-    await request(app).post(`/api/v1/users/${star.user.username}/follow`).set(fan.auth);
-    const notes = await prisma.notification.findMany({ where: { user_id: star.user.id } });
-    expect(notes).toHaveLength(1);
-    expect(notes[0]!.link).toBe(`/u/${fan.user.username}`);
+    expect((await request(app).post(`/api/v1/users/${star.user.username}/follow`).set(fan.auth)).status).toBe(404);
   });
 
   it('hides a private profile from everyone but its owner', async () => {

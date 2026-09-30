@@ -22,7 +22,6 @@ export const intentSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('mylabs') }),
   z.object({ kind: z.literal('due') }),
   z.object({ kind: z.literal('readall') }),
-  z.object({ kind: z.literal('follow'), username: z.string().regex(/^[a-zA-Z0-9_]{3,30}$/), undo: z.boolean().default(false) }),
   z.object({ kind: z.literal('vote'), query: z.string().trim().min(2).max(80) }),
 ]);
 export type BrainIntent = z.infer<typeof intentSchema>;
@@ -58,7 +57,6 @@ The only things you can do are these intents. Anything else, say you can't, with
 - {"kind":"due"}: their own tasks and deadlines, for "what do I need to do", "what's due", "my tasks", "what's next".
 - {"kind":"events"}: upcoming events. {"kind":"trending"}: the labs people are loving right now. {"kind":"mylabs"}: the labs they have started.
 - {"kind":"readall"}: mark all their notifications as read.
-- {"kind":"follow","username":"<username>","undo":false}
 - {"kind":"vote","query":"<lab name>"}
 
 Only claim you did something if you returned the matching intent. The app asks the member to confirm anything that changes something, so talk like it is happening ("on it"), not like it is finished, until they confirm. Never say you sent, posted, deleted or changed something you have no intent for.
