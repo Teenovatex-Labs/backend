@@ -11,16 +11,18 @@ export const getNotifications = async (req: AuthRequest, res: Response): Promise
   res.json(notifications);
 };
 
+export const getUnreadCount = async (req: AuthRequest, res: Response): Promise<void> => {
+  const unread = await prisma.notification.count({ where: { user_id: req.userId, read: false } });
+  res.json({ unread });
+};
+
 export const markAsRead = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
-  const notif = await prisma.notification.findUnique({ where: { id } });
-
-  if (!notif || notif.user_id !== req.userId) {
-    res.status(404).json({ error: 'Notification not found', code: 'NOT_FOUND' });
-    return;
-  }
-
-  await prisma.notification.update({ where: { id }, data: { read: true } });
+  const { count } = await prisma.notification.updateMany({
+    where: { id, user_id: req.userId },
+    data: { read: true },
+  });
+  if (count === 0) { res.status(404).json({ error: 'Notification not found', code: 'NOT_FOUND' }); return; }
   res.json({ message: 'Marked as read' });
 };
 
@@ -30,4 +32,11 @@ export const markAllAsRead = async (req: AuthRequest, res: Response): Promise<vo
     data: { read: true },
   });
   res.json({ message: 'All notifications marked as read' });
+};
+
+export const deleteNotification = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const { count } = await prisma.notification.deleteMany({ where: { id, user_id: req.userId } });
+  if (count === 0) { res.status(404).json({ error: 'Notification not found', code: 'NOT_FOUND' }); return; }
+  res.json({ message: 'Notification deleted' });
 };
