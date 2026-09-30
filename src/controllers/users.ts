@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import { uploadToCloudinary } from '../middleware/upload.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 import { createNotification } from '../lib/notify.js';
+import { assertClean } from '../lib/guard.js';
 
 const publicSelect = {
   id: true,
@@ -33,6 +34,8 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       google_id: true,
       birth_date: true,
       username_set: true,
+      suspended_until: true,
+      suspended_reason: true,
       timezone: true,
       role: true,
     },
@@ -61,6 +64,9 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
     social_links?: Record<string, string>;
     timezone?: string;
   };
+
+  // A bio is public, so it gets the same check as a post. Social links are separate fields on purpose.
+  await assertClean(req.userId!, [body.full_name, body.bio], { allowLinks: true });
 
   const updated = await prisma.user.update({
     where: { id: req.userId },

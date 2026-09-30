@@ -6,6 +6,7 @@ import { awardPoints } from '../lib/points.js';
 import { uploadToCloudinary } from '../middleware/upload.js';
 import { createProjectSchema } from '../schemas/project.js';
 import { dayToDb, localDay } from '../lib/day.js';
+import { assertClean } from '../lib/guard.js';
 
 type MulterAuthRequest = AuthRequest & { file?: Express.Multer.File };
 
@@ -22,6 +23,7 @@ export const createProject = async (req: MulterAuthRequest, res: Response): Prom
   }
 
   const { name, short_description, description, category, demo_url, github_url, tx_post_url } = parsed.data;
+  await assertClean(req.userId!, [name, short_description, description, ...tags]);
 
   const base = slugify(name);
   const slug = await uniqueSlug(base, async (s) => !!(await prisma.project.findUnique({ where: { slug: s } })));
@@ -180,6 +182,8 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
     tx_post_url?: string;
     tags?: string[];
   };
+
+  await assertClean(req.userId!, [body.name, body.short_description, body.description, ...(body.tags ?? [])]);
 
   const updated = await prisma.project.update({
     where: { id },
