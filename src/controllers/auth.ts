@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { config } from '../config.js';
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
@@ -22,7 +23,6 @@ import {
   secondsUntilResendAllowed,
   MAX_VERIFICATION_ATTEMPTS,
 } from '../lib/verification.js';
-import { slugify, uniqueSlug } from '../lib/slug.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 
 const googleClient = new OAuth2Client(config.googleClientId);
@@ -432,15 +432,13 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
         },
       });
     } else {
-      const base = slugify(payload.name ?? payload.email.split('@')[0] ?? 'builder');
-      const username = await uniqueSlug(
-        base,
-        async (s) => !!(await prisma.user.findUnique({ where: { username: s } }))
-      );
+      // Placeholder only: the member is made to pick a real username before entering the app.
+      const username = `user_${crypto.randomBytes(5).toString('hex')}`;
       user = await prisma.user.create({
         data: {
           full_name: payload.name ?? payload.email,
           username,
+          username_set: false,
           email: payload.email,
           google_id: payload.sub,
           avatar_url: payload.picture ?? null,
