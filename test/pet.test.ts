@@ -146,7 +146,7 @@ describe('what the model is never allowed to make Alfred do', () => {
     stubProviders(() => gemini(say('Visit https://evil.example.com or call 0803 555 1234')));
     const me = await optedIn();
     const res = await ask(me.auth);
-    expect(res.body.reply).toMatch(/didn't quite get that/);
+    expect(res.body.reply).toMatch(/say that again/);
     expect(res.body.intent).toBeNull();
   });
 
