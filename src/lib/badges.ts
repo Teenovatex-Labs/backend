@@ -81,8 +81,20 @@ export async function checkBadges(userId: string): Promise<BadgeDef[]> {
   return fresh;
 }
 
+// Badge checks run in the background so they never slow down or fail the request that caused them.
+// They are tracked here so a caller that needs quiet (a test resetting the database) can wait for them.
+const inFlight = new Set<Promise<unknown>>();
+
 /** Fire-and-forget for call sites that must never fail because of a badge. */
 export const checkBadgesQuietly = (userId: string | undefined | null) => {
   if (!userId) return;
-  void checkBadges(userId).catch((err) => console.error('Badge check failed:', err));
+  const job = checkBadges(userId)
+    .catch((err) => console.error('Badge check failed:', err))
+    .finally(() => inFlight.delete(job));
+  inFlight.add(job);
+};
+
+/** Resolves when every background badge check has finished. */
+export const settleBadgeChecks = async () => {
+  while (inFlight.size > 0) await Promise.allSettled([...inFlight]);
 };
