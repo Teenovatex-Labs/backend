@@ -13,13 +13,15 @@ const strongPassword = z
   .regex(/[A-Z]/, 'Password must contain an uppercase letter')
   .regex(/[0-9]/, 'Password must contain a number');
 
+export const usernameField = z
+  .string()
+  .min(3)
+  .max(30)
+  .regex(/^[a-zA-Z0-9_]+$/, 'Username: letters, numbers, underscores only');
+
 export const registerSchema = z.object({
   full_name: z.string().min(2).max(100),
-  username: z
-    .string()
-    .min(3)
-    .max(30)
-    .regex(/^[a-zA-Z0-9_]+$/, 'Username: letters, numbers, underscores only'),
+  username: usernameField,
   email: z.string().email(),
   password: strongPassword,
   birth_date: birthDateField,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { birthDateField, timezoneField } from './auth.js';
+import { birthDateField, timezoneField, usernameField } from './auth.js';
 
 const optionalUrl = z.string().url().optional().or(z.literal(''));
 
@@ -18,3 +18,5 @@ export const updateUserSchema = z.object({
 });
 
 export const setBirthDateSchema = z.object({ birth_date: birthDateField });
+
+export const setUsernameSchema = z.object({ username: usernameField });
