@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Nightly backup of the TeenovateX database. Keeps 14 days. Restore with:
+#   gunzip -c FILE.sql.gz | psql "$DIRECT_DATABASE_URL"
+set -euo pipefail
+ENV_FILE=/home/TeenovateX-Labs/backend/.env
+DIR=/var/backups/teenovatex
+KEEP_DAYS=14
+mkdir -p "$DIR"; chmod 700 "$DIR"
+
+# Read only DATABASE_URL (never source the whole file: it holds other secrets).
+URL=$(grep -m1 '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2- | tr -d '"'"'"'')
+# pg_dump needs a real session, so use Neon's direct host instead of the connection pooler.
+DIRECT=${URL/-pooler/}
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+OUT="$DIR/teenovatex-$STAMP.sql.gz"
+
+pg_dump --no-owner --no-privileges --clean --if-exists "$DIRECT" | gzip -9 > "$OUT.tmp"
+# A backup that is suspiciously small is a failed backup.
+[ "$(stat -c%s "$OUT.tmp")" -gt 1000 ] || { echo "backup too small, discarding" >&2; rm -f "$OUT.tmp"; exit 1; }
+mv "$OUT.tmp" "$OUT"; chmod 600 "$OUT"
+find "$DIR" -name 'teenovatex-*.sql.gz' -mtime +$KEEP_DAYS -delete
+echo "backup ok: $OUT ($(du -h "$OUT" | cut -f1))"

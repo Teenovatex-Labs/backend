@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Restarts the API if its readiness check (which also proves the database is reachable) fails twice in a row.
+STATE=/run/teenovatex-watchdog.fails
+if curl -fsS --max-time 8 http://127.0.0.1:4000/health/ready >/dev/null 2>&1; then
+  rm -f "$STATE"; exit 0
+fi
+if [ -f "$STATE" ]; then
+  logger -t teenovatex-watchdog "readiness failed twice, restarting teenovatex-backend"
+  systemctl restart teenovatex-backend; rm -f "$STATE"
+else
+  touch "$STATE"
+fi
