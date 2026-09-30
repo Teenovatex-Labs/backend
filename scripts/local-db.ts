@@ -5,8 +5,9 @@ import EmbeddedPostgres from 'embedded-postgres';
 
 // A private Postgres for local development, so running the app or a migration on your
 // machine can never touch the live Neon database. Data lives in .local-db (git-ignored).
-const dir = path.resolve('.local-db');
-const port = 54329;
+// LOCAL_DB_DIR / LOCAL_DB_PORT let a second, separate local database run beside this one.
+const dir = path.resolve(process.env.LOCAL_DB_DIR ?? '.local-db');
+const port = Number(process.env.LOCAL_DB_PORT ?? 54329);
 const url = `postgresql://tx:tx@localhost:${port}/tx_dev`;
 
 const pg = new EmbeddedPostgres({ databaseDir: dir, user: 'tx', password: 'tx', port, persistent: true, onLog: () => {} });

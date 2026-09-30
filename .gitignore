@@ -4,4 +4,4 @@ dist/
 *.log
 
 .claude/
-.local-db/
+.local-db*/
