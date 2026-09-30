@@ -16,6 +16,8 @@ import { blocksRouter, reportsRouter } from './routes/safety.js';
 import adminRouter from './routes/admin.js';
 import communityRouter from './routes/community.js';
 import messagesRouter from './routes/messages.js';
+import labsDeepRouter from './routes/labsDeep.js';
+import { startReminders } from './jobs/reminders.js';
 import pointsRouter from './routes/points.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import notificationsRouter from './routes/notifications.js';
@@ -49,6 +51,7 @@ const v1 = '/api/v1';
 app.use(`${v1}/auth`, authRouter);
 app.use(`${v1}/users`, usersRouter);
 app.use(`${v1}/projects`, projectsRouter);
+app.use(`${v1}/projects`, labsDeepRouter);
 app.use(`${v1}/votes`, votesRouter);
 app.use(`${v1}/events`, eventsRouter);
 app.use(`${v1}/learn`, learnRouter);
@@ -82,6 +85,7 @@ app.use(errorHandler);
 
 if (config.env !== 'test') {
   app.listen(config.port, () => console.log(`Server running on port http://localhost:${config.port}`));
+  startReminders();
 }
 
 export { app };
