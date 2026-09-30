@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
+import { publish } from './realtime.js';
 
 type NotifyOptions = { link?: string; payload?: Prisma.InputJsonValue };
 
@@ -20,7 +21,7 @@ export const createNotification = async (
     const settings = await prisma.userSettings.findUnique({ where: { user_id: userId } });
     if (settings && settings[setting] === false) return null;
   }
-  return prisma.notification.create({
+  const created = await prisma.notification.create({
     data: {
       user_id: userId,
       type,
@@ -29,4 +30,6 @@ export const createNotification = async (
       ...(options.payload !== undefined && { payload: options.payload }),
     },
   });
+  publish(userId, { type: 'notification' });
+  return created;
 };

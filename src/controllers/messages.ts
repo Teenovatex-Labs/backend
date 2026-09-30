@@ -6,6 +6,7 @@ import { assertClean } from '../lib/guard.js';
 import { SELF_HARM_MESSAGE } from '../lib/contentFilter.js';
 import { createNotification } from '../lib/notify.js';
 import { blockedEitherWay } from './safety.js';
+import { publish } from '../lib/realtime.js';
 
 const PAGE = 50;
 const pairKey = (a: string, b: string) => [a, b].sort().join(':');
@@ -217,6 +218,7 @@ export const sendMessage = async (req: AuthRequest, res: Response): Promise<void
   const hidden = await blockedEitherWay(userId);
   const recipients = convo.members.map((m) => m.user_id).filter((u) => u !== userId && !hidden.includes(u));
   for (const recipient of recipients) {
+    publish(recipient, { type: 'message', conversation_id: id });
     const recent = await prisma.notification.count({
       where: { user_id: recipient, type: 'message', read: false, link: `/messages/${id}`, created_at: { gt: new Date(Date.now() - 10 * 60_000) } },
     });
