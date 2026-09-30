@@ -6,6 +6,7 @@ import { HttpError } from '../lib/errors.js';
 import { assertClean } from '../lib/guard.js';
 import { createNotification } from '../lib/notify.js';
 import { checkBadgesQuietly } from '../lib/badges.js';
+import { notifyMentions } from '../lib/mentions.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const author = { select: { username: true, avatar_url: true } } as const;
@@ -73,6 +74,7 @@ export const createUpdate = async (req: AuthRequest, res: Response): Promise<voi
   await assertClean(req.userId!, [title, body]);
   const update = await prisma.labUpdate.create({ data: { lab_id: lab.id, author_id: req.userId!, title, body } });
   checkBadgesQuietly(req.userId);
+  await notifyMentions(req.userId!, `${title}\n${body}`, { what: `in an update on ${lab.name}`, link: `/labs/${lab.slug}?tab=updates` });
   res.status(201).json(update);
 };
 

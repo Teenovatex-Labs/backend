@@ -7,6 +7,7 @@ import { assertClean } from '../lib/guard.js';
 import { createNotification } from '../lib/notify.js';
 import { blockedEitherWay } from './safety.js';
 import { checkBadgesQuietly } from '../lib/badges.js';
+import { notifyMentions } from '../lib/mentions.js';
 
 const PAGE = 15;
 const author = { select: { username: true, avatar_url: true } } as const;
@@ -98,6 +99,7 @@ export const createPost = async (req: AuthRequest, res: Response): Promise<void>
 
   const post = await prisma.post.create({ data: { space_id: space.id, author_id: req.userId!, title, body }, include: { author } });
   checkBadgesQuietly(req.userId);
+  await notifyMentions(req.userId!, `${title}\n${body}`, { what: `in a post: "${title}"`, link: `/community/posts/${post.id}` });
   res.status(201).json(shapePost({ ...post, space: { slug: space.slug, name: space.name } }, true));
 };
 
@@ -127,6 +129,7 @@ export const createComment = async (req: AuthRequest, res: Response): Promise<vo
     await createNotification(post.author_id, 'comment', `${comment.author.username} commented on "${post.title}"`, { link: `/community/posts/${id}` });
   }
   checkBadgesQuietly(req.userId);
+  await notifyMentions(req.userId!, body, { what: `in a comment on "${post.title}"`, link: `/community/posts/${id}` });
   res.status(201).json({ id: comment.id, body: comment.body, created_at: comment.created_at, author: comment.author });
 };
 
