@@ -5,6 +5,8 @@ import { uploadToCloudinary } from '../middleware/upload.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 import { createNotification } from '../lib/notify.js';
 import { assertClean } from '../lib/guard.js';
+import { levelFor } from '../lib/levels.js';
+import { BADGES, checkBadgesQuietly } from '../lib/badges.js';
 
 const publicSelect = {
   id: true,
@@ -34,6 +36,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       google_id: true,
       birth_date: true,
       username_set: true,
+      streak_freezes: true,
       suspended_until: true,
       suspended_reason: true,
       timezone: true,
@@ -53,6 +56,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     age_confirmed: birth_date !== null,
     has_password: !!password_hash,
     has_google: !!google_id,
+    level: levelFor(user.points),
     rank: await getRank(user.points),
   });
 };
@@ -131,6 +135,11 @@ export const getUserByUsername = async (req: AuthRequest, res: Response): Promis
     ...rest,
     private: false,
     follows_you,
+    level: levelFor(user.points),
+    badges: (await prisma.userBadge.findMany({ where: { user_id: user.id }, orderBy: { awarded_at: 'asc' } })).flatMap((b) => {
+      const def = BADGES.find((d) => d.key === b.key);
+      return def ? [{ key: def.key, title: def.title, description: def.description, symbol: def.symbol, awarded_at: b.awarded_at }] : [];
+    }),
     rank: await getRank(user.points),
     followers: _count.followers,
     following: _count.following,
@@ -176,6 +185,8 @@ export const followUser = async (req: AuthRequest, res: Response): Promise<void>
     await createNotification(target.id, 'follow', `@${me?.username} started following you`, {
       link: `/u/${me?.username}`,
     });
+    checkBadgesQuietly(req.userId);
+    checkBadgesQuietly(target.id);
   }
 
   res.json({ message: `Following ${username}` });
