@@ -12,16 +12,14 @@ export const getMyPoints = async (req: AuthRequest, res: Response): Promise<void
     take: 50,
   });
 
+  // Totals come from the whole history, grouped by the typed kind (not by guessing from the text).
+  const grouped = await prisma.pointsLog.groupBy({ by: ['kind'], where: { user_id: req.userId }, _sum: { points: true } });
+  const sum = (...kinds: string[]) => grouped.filter((g) => kinds.includes(g.kind)).reduce((n, g) => n + (g._sum.points ?? 0), 0);
   const breakdown = {
-    votes_received: activity
-      .filter((a) => a.reason.toLowerCase().includes('vote'))
-      .reduce((s, a) => s + a.points, 0),
-    posts_tagged: activity
-      .filter((a) => a.reason.toLowerCase().includes('tx'))
-      .reduce((s, a) => s + a.points, 0),
-    streak_bonus: activity
-      .filter((a) => a.reason.toLowerCase().includes('streak') || a.reason.toLowerCase().includes('login'))
-      .reduce((s, a) => s + a.points, 0),
+    votes_received: sum('vote_received', 'vote_removed'),
+    posts_tagged: sum('post_tagged'),
+    streak_bonus: sum('streak', 'streak_milestone'),
+    lessons: sum('lesson'),
   };
 
   res.json({
