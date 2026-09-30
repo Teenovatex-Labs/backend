@@ -9,6 +9,7 @@ import {
   hashToken,
   verifyRefreshToken,
   generateAccessToken,
+  generateRefreshToken,
   generateResetToken,
   verifyResetToken,
 } from '../lib/tokens.js';
@@ -233,6 +234,9 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   });
 };
 
+/** How long the previous refresh token still works after a rotation (two tabs refreshing together). */
+export const REFRESH_GRACE_MS = 60_000;
+
 export const refresh = async (req: Request, res: Response): Promise<void> => {
   const { refresh_token } = req.body as { refresh_token: string };
 
@@ -250,15 +254,34 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
   }
 
   const token_hash = hashToken(refresh_token);
-  const session = await prisma.session.findUnique({ where: { token_hash } });
-  if (!session) {
-    res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
+  const now = new Date();
+
+  // Every refresh swaps in a brand-new refresh token, so a stolen one only works until the real
+  // owner's next refresh. The updateMany is the atomic step: of two simultaneous requests with the
+  // same token exactly one wins the rotation.
+  const next = generateRefreshToken(decoded.userId);
+  const rotated = await prisma.session.updateMany({
+    where: { token_hash },
+    data: { token_hash: hashToken(next), prev_token_hash: token_hash, rotated_at: now, last_active: now },
+  });
+  if (rotated.count === 1) {
+    res.json({ access_token: generateAccessToken(decoded.userId), refresh_token: next });
     return;
   }
 
-  await prisma.session.update({ where: { id: session.id }, data: { last_active: new Date() } });
-
-  res.json({ access_token: generateAccessToken(decoded.userId) });
+  const previous = await prisma.session.findUnique({ where: { prev_token_hash: token_hash } });
+  if (previous?.rotated_at && now.getTime() - previous.rotated_at.getTime() <= REFRESH_GRACE_MS) {
+    // The other tab just rotated it and already holds the new token; give this one a fresh access token only.
+    res.json({ access_token: generateAccessToken(decoded.userId) });
+    return;
+  }
+  if (previous) {
+    // An already-used token turning up after the grace window means it was copied. End that session.
+    await prisma.session.delete({ where: { id: previous.id } });
+    res.status(401).json({ error: 'Session expired. Please sign in again.', code: 'SESSION_EXPIRED' });
+    return;
+  }
+  res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
 };
 
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
