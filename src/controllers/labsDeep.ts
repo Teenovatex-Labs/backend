@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 import { assertClean } from '../lib/guard.js';
 import { createNotification } from '../lib/notify.js';
+import { checkBadgesQuietly } from '../lib/badges.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const author = { select: { username: true, avatar_url: true } } as const;
@@ -71,6 +72,7 @@ export const createUpdate = async (req: AuthRequest, res: Response): Promise<voi
   const { title, body } = req.body as { title: string; body: string };
   await assertClean(req.userId!, [title, body]);
   const update = await prisma.labUpdate.create({ data: { lab_id: lab.id, author_id: req.userId!, title, body } });
+  checkBadgesQuietly(req.userId);
   res.status(201).json(update);
 };
 
@@ -230,6 +232,7 @@ export const updateMilestone = async (req: AuthRequest, res: Response): Promise<
   });
   // A finished milestone is worth celebrating with the team.
   if (b.done && !existing.done_at) {
+    for (const uid of await teamIds(lab.id)) checkBadgesQuietly(uid);
     for (const uid of (await teamIds(lab.id)).filter((u) => u !== req.userId)) {
       await createNotification(uid, 'milestone', `Milestone reached in ${lab.name}: ${m.title}`, { link: `/labs/${lab.slug}` });
     }
@@ -294,6 +297,7 @@ export const answerRequest = async (req: AuthRequest, res: Response): Promise<vo
     await tx.labJoinRequest.update({ where: { id: rid }, data: { status: accept ? 'accepted' : 'declined' } });
     if (accept) await tx.labMember.upsert({ where: { lab_id_user_id: { lab_id: lab.id, user_id: request.user_id } }, create: { lab_id: lab.id, user_id: request.user_id }, update: {} });
   });
+  if (accept) checkBadgesQuietly(request.user_id);
   await createNotification(request.user_id, 'join_request', accept ? `You're on the team for ${lab.name}!` : `${lab.name} isn't taking new people right now.`, { link: `/labs/${lab.slug}` });
   res.json({ message: accept ? 'Added to the team' : 'Declined' });
 };

@@ -2,6 +2,7 @@ import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 import { awardPointsTx } from '../lib/points.js';
+import { checkBadgesQuietly } from '../lib/badges.js';
 
 const LESSON_POINTS = 5;
 
@@ -102,6 +103,7 @@ export const completeLesson = async (req: AuthRequest, res: Response): Promise<v
     return LESSON_POINTS;
   });
 
+  if (awarded > 0) checkBadgesQuietly(userId);
   res.json({ completed: true, points_awarded: awarded });
 };
 

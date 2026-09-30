@@ -6,6 +6,7 @@ import { HttpError } from '../lib/errors.js';
 import { assertClean } from '../lib/guard.js';
 import { createNotification } from '../lib/notify.js';
 import { blockedEitherWay } from './safety.js';
+import { checkBadgesQuietly } from '../lib/badges.js';
 
 const PAGE = 15;
 const author = { select: { username: true, avatar_url: true } } as const;
@@ -96,6 +97,7 @@ export const createPost = async (req: AuthRequest, res: Response): Promise<void>
   if (today >= 10) throw new HttpError(429, 'POST_LIMIT', "That's plenty for today. Come back tomorrow with more.");
 
   const post = await prisma.post.create({ data: { space_id: space.id, author_id: req.userId!, title, body }, include: { author } });
+  checkBadgesQuietly(req.userId);
   res.status(201).json(shapePost({ ...post, space: { slug: space.slug, name: space.name } }, true));
 };
 
@@ -124,6 +126,7 @@ export const createComment = async (req: AuthRequest, res: Response): Promise<vo
   if (post.author_id !== req.userId) {
     await createNotification(post.author_id, 'comment', `${comment.author.username} commented on "${post.title}"`, { link: `/community/posts/${id}` });
   }
+  checkBadgesQuietly(req.userId);
   res.status(201).json({ id: comment.id, body: comment.body, created_at: comment.created_at, author: comment.author });
 };
 

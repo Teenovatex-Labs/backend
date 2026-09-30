@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { awardPointsTx } from '../lib/points.js';
 import { createNotification } from '../lib/notify.js';
 import { dayToDb, localDay, nextLocalMidnight } from '../lib/day.js';
+import { checkBadgesQuietly } from '../lib/badges.js';
 
 const MAX_DAILY_VOTES = 3;
 const VOTE_POINTS = 10;
@@ -69,7 +70,9 @@ export const castVote = async (req: AuthRequest, res: Response): Promise<void> =
     return;
   }
 
+  checkBadgesQuietly(userId);
   if (!isOwn) {
+    checkBadgesQuietly(project.user_id);
     await createNotification(project.user_id, 'vote', `Someone voted on your lab "${project.name}"`, {
       link: `/labs/${project.slug}`,
       payload: { project_id, slug: project.slug },

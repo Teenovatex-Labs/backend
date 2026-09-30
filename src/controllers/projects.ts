@@ -7,6 +7,7 @@ import { uploadToCloudinary } from '../middleware/upload.js';
 import { createProjectSchema } from '../schemas/project.js';
 import { dayToDb, localDay } from '../lib/day.js';
 import { assertClean } from '../lib/guard.js';
+import { checkBadgesQuietly } from '../lib/badges.js';
 
 type MulterAuthRequest = AuthRequest & { file?: Express.Multer.File };
 
@@ -53,6 +54,7 @@ export const createProject = async (req: MulterAuthRequest, res: Response): Prom
     await awardPoints(req.userId!, 'post_tagged', 5, 'Posted update and tagged TX', project.id);
   }
 
+  checkBadgesQuietly(req.userId);
   res.status(201).json({
     id: project.id,
     name: project.name,
