@@ -585,3 +585,17 @@ model PetUsage {
   @@id([user_id, day])
   @@map("pet_usage")
 }
+
+// Team news shown as a banner across the app. Created by moderators and admins.
+model Announcement {
+  id         String    @id @default(uuid())
+  title      String
+  body       String
+  link       String?
+  created_by String?
+  created_at DateTime  @default(now())
+  expires_at DateTime?
+
+  @@index([created_at])
+  @@map("announcements")
+}
