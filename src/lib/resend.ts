@@ -56,3 +56,63 @@ export const sendPasswordResetEmail = async (email: string, code: string, resetT
   });
   await send(email, `${code} — reset your TeenovateX password`, html, 'Password reset code', `${code} / ${link}`);
 };
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+const TOPIC_LABEL: Record<string, string> = {
+  hello: 'Just saying hello',
+  partner: 'Partnership',
+  sponsor: 'Sponsorship',
+  mentor: 'Mentoring',
+  donate: 'Donation',
+  press: 'Press',
+  other: 'Something else',
+};
+
+export const sendContactMessage = async (msg: { name: string; email: string; topic: string; message: string }) => {
+  const topic = TOPIC_LABEL[msg.topic] ?? TOPIC_LABEL.other;
+  const inbox = process.env.CONTACT_TO;
+
+  if (!resend || !inbox) {
+    console.log(`[DEV] Contact message from ${msg.name} <${msg.email}> [${topic}]: ${msg.message}`);
+    return;
+  }
+
+  const teamHtml = `
+    <div style="font-family:Helvetica,Arial,sans-serif;max-width:560px;color:#262822;">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#8d355b;">${escapeHtml(topic)}</p>
+      <h2 style="margin:0 0 16px;">${escapeHtml(msg.name)} wrote in</h2>
+      <p style="margin:0 0 16px;white-space:pre-wrap;line-height:1.7;">${escapeHtml(msg.message)}</p>
+      <p style="margin:0;font-size:13px;color:#5c6055;">Reply to this email to answer ${escapeHtml(msg.name)} directly (${escapeHtml(msg.email)}).</p>
+    </div>`;
+
+  const { error } = await resend.emails.send({
+    from: FROM,
+    to: inbox,
+    replyTo: msg.email,
+    subject: `[${topic}] ${msg.name} via teenovatex.org`,
+    html: teamHtml,
+  });
+  if (error) {
+    console.error('Resend error:', error);
+    throw new Error('Failed to send contact message');
+  }
+
+  // The copy to the sender is a courtesy — the message is already delivered
+  // to the team, so a failure here must not fail the request.
+  const copyHtml = renderEmailShell({
+    preheader: 'Got it. A real human will read this.',
+    eyebrow: 'Message received',
+    heading: `Thanks, ${escapeHtml(msg.name.split(' ')[0])}. It landed.`,
+    bodyHtml: `
+      <p style="margin:0 0 12px;">Your message reached the TeenovateX team. Someone will reply from this thread, usually within a few days.</p>
+      <p style="margin:0;white-space:pre-wrap;border-left:3px solid #f3aac7;padding-left:12px;color:#262822;">${escapeHtml(msg.message)}</p>
+    `,
+    ctaLabel: 'Back to the site',
+    ctaHref: SITE_URL,
+    footerNote: 'You are getting this because this address was used on the contact form at teenovatex.org.',
+  });
+  const copy = await resend.emails.send({ from: FROM, to: msg.email, subject: 'We got your message', html: copyHtml });
+  if (copy.error) console.error('Resend confirmation error:', copy.error);
+};
