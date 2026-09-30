@@ -174,6 +174,9 @@ model Session {
   token_hash      String    @unique
   // The token this one replaced, kept briefly so two tabs refreshing at the same moment don't clash.
   prev_token_hash String?   @unique
+  // How many times this session's refresh token has been replaced. Together with the session id it
+  // lets the server re-create the current token exactly, so a lost response or a second tab is safe.
+  rotation        Int       @default(0)
   rotated_at      DateTime?
   device_info     String?
   ip              String?
