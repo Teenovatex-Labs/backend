@@ -92,10 +92,14 @@ model Vote {
   user_id    String
   project_id String
   voted_at   DateTime @default(now())
+  // The voter's own calendar day. With the unique key below it makes "one vote per project
+  // per day" a database guarantee, so a double-click or two tabs can't slip a second one in.
+  vote_day   DateTime @db.Date
 
   user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
   project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
+  @@unique([user_id, project_id, vote_day])
   @@map("votes")
 }
 
@@ -117,6 +121,9 @@ model Notification {
   user_id    String
   type       String
   message    String
+  // Where tapping the notification goes, e.g. "/labs/my-lab", and any extra data for the pet.
+  link       String?
+  payload    Json?
   read       Boolean  @default(false)
   created_at DateTime @default(now())
 
