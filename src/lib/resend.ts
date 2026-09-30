@@ -7,7 +7,10 @@ import { renderEmailShell } from './emailTemplate.js';
 // verified domain address for real deliverability.
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const FROM = process.env.RESEND_FROM ?? 'TeenovateX Labs <onboarding@resend.dev>';
-const SITE_URL = process.env.FRONTEND_URL ?? 'https://www.teenovatex.org';
+// FRONTEND_URL is the CORS allow-list (can hold several origins), so links and
+// assets in emails use their own single-origin settings.
+const SITE_URL = process.env.SITE_URL ?? 'https://www.teenovatex.org';
+const APP_URL = process.env.APP_URL ?? 'https://app.teenovatex.org';
 
 const send = async (to: string, subject: string, html: string, devLabel: string, devExtra: string) => {
   if (!resend) {
@@ -22,7 +25,7 @@ const send = async (to: string, subject: string, html: string, devLabel: string,
 };
 
 export const sendVerificationEmail = async (email: string, code: string) => {
-  const link = `${SITE_URL}/auth?mode=signup&verify_email=${encodeURIComponent(email)}&code=${code}`;
+  const link = `${APP_URL}/auth?mode=signup&verify_email=${encodeURIComponent(email)}&code=${code}`;
   const html = renderEmailShell({
     preheader: `${code} is your code — welcome to the comeback.`,
     eyebrow: 'One quick step',
@@ -40,7 +43,7 @@ export const sendVerificationEmail = async (email: string, code: string) => {
 };
 
 export const sendPasswordResetEmail = async (email: string, code: string, resetToken: string) => {
-  const link = `${SITE_URL}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const link = `${APP_URL}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
   const html = renderEmailShell({
     preheader: `${code} gets you back in. No drama.`,
     eyebrow: 'Password reset',
