@@ -1,7 +1,11 @@
+import './config.js';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import helmet from 'helmet';
+import { config } from './config.js';
+import { prisma } from './db.js';
 import { globalLimiter } from './middleware/rateLimiter.js';
+import { errorHandler, notFound } from './middleware/errorHandler.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import projectsRouter from './routes/projects.js';
@@ -12,24 +16,27 @@ import notificationsRouter from './routes/notifications.js';
 import settingsRouter from './routes/settings.js';
 import contactRouter from './routes/contact.js';
 
-dotenv.config();
-
 const app = express();
+
+app.disable('x-powered-by');
 
 // Behind nginx every request arrives from 127.0.0.1; trusting one proxy hop makes
 // req.ip (and so every rate limiter) key on the real visitor instead.
 app.set('trust proxy', 1);
 
-// FRONTEND_URL can be a comma-separated list — production serves both the
-// apex and www domains, and browsers treat them as distinct origins.
-const allowedOrigins = (process.env.FRONTEND_URL ?? '*').split(',').map((o) => o.trim());
+app.use(helmet());
+
+// Only the origins listed in FRONTEND_URL may call the API from a browser. There is
+// deliberately no wildcard fallback: a missing list fails at startup in production.
 app.use(
   cors({
-    origin: allowedOrigins.includes('*') ? '*' : allowedOrigins,
+    origin: config.allowedOrigins,
     credentials: true,
   })
 );
-app.use(express.json());
+
+// The largest legitimate JSON body is a project description; images go through multer.
+app.use(express.json({ limit: '100kb' }));
 app.use(globalLimiter);
 
 const v1 = '/api/v1';
@@ -45,7 +52,23 @@ app.use(`${v1}/contact`, contactRouter);
 
 app.get('/', (_req, res) => res.json({ status: 'TX API v1 running' }));
 
-const PORT = process.env.PORT ?? 3000;
-app.listen(PORT, () => console.log(`Server running on port http://localhost:${PORT}`));
+// Liveness answers instantly (is the process up?); readiness also proves the database
+// is reachable. Point uptime monitoring at /health/ready.
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health/ready', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ status: 'ready' });
+  } catch {
+    res.status(503).json({ status: 'unavailable', code: 'DB_UNAVAILABLE' });
+  }
+});
+
+app.use(notFound);
+app.use(errorHandler);
+
+if (config.env !== 'test') {
+  app.listen(config.port, () => console.log(`Server running on port http://localhost:${config.port}`));
+}
 
 export { app };
