@@ -40,9 +40,13 @@ export const requireRole =
 
 /** Posting, voting and other public actions wait until the member has confirmed their age. */
 export const requireAgeConfirmed = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
-  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { birth_date: true } });
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { birth_date: true, username_set: true } });
   if (!user?.birth_date) {
     res.status(403).json({ error: 'Please confirm your date of birth first', code: 'AGE_REQUIRED' });
+    return;
+  }
+  if (!user.username_set) {
+    res.status(403).json({ error: 'Please choose a username first', code: 'USERNAME_REQUIRED' });
     return;
   }
   next();
