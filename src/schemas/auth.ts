@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import { isValidBirthDate, isValidTimezone } from '../lib/age.js';
+
+export const birthDateField = z
+  .string()
+  .refine((v) => isValidBirthDate(v), 'Enter a real date of birth (YYYY-MM-DD)');
+
+export const timezoneField = z.string().refine(isValidTimezone, 'Unknown time zone');
 
 const strongPassword = z
   .string()
@@ -15,6 +22,8 @@ export const registerSchema = z.object({
     .regex(/^[a-zA-Z0-9_]+$/, 'Username: letters, numbers, underscores only'),
   email: z.string().email(),
   password: strongPassword,
+  birth_date: birthDateField,
+  timezone: timezoneField.optional(),
 });
 
 export const loginSchema = z.object({
