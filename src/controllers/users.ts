@@ -31,6 +31,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       password_hash: true,
       google_id: true,
       birth_date: true,
+      username_set: true,
       timezone: true,
       role: true,
     },
@@ -165,4 +166,34 @@ export const setBirthDate = async (req: AuthRequest, res: Response): Promise<voi
 
   await prisma.user.update({ where: { id: req.userId }, data: { birth_date: toDbDate(birth_date) } });
   res.json({ message: 'Thanks, all set', age_confirmed: true });
+};
+
+// Google sign-ups arrive with a placeholder handle. They choose their own once; after
+// that it is fixed, like the birth date.
+export const setUsername = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { username } = req.body as { username: string };
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { username_set: true } });
+  if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
+  if (user.username_set) {
+    res.status(409).json({ error: 'Your username is already set.', code: 'ALREADY_SET' });
+    return;
+  }
+  const taken = await prisma.user.findFirst({
+    where: { username: { equals: username, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (taken) {
+    res.status(409).json({ error: 'That username is taken. Try another.', code: 'USERNAME_TAKEN' });
+    return;
+  }
+  try {
+    await prisma.user.update({ where: { id: req.userId }, data: { username, username_set: true } });
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') {
+      res.status(409).json({ error: 'That username is taken. Try another.', code: 'USERNAME_TAKEN' });
+      return;
+    }
+    throw err;
+  }
+  res.json({ username });
 };
