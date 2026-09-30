@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  member
+  mentor
+  moderator
+  admin
+}
+
 model User {
   id            String    @id @default(uuid())
   username      String    @unique
@@ -20,8 +27,15 @@ model User {
   points        Int       @default(0)
   streak        Int       @default(0)
   last_login_at DateTime?
-  created_at    DateTime  @default(now())
-  updated_at    DateTime  @updatedAt
+
+  // Age gate: members must be 13 or older. Only the date is stored (no time), and it is
+  // never included in any public profile response.
+  birth_date DateTime? @db.Date
+  // IANA name such as "Africa/Lagos"; drives "today" for streaks, votes and reminders.
+  timezone   String?
+  role       Role      @default(member)
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
 
   // Email verification — a 6-digit code sent via Resend at signup.
   // Google accounts skip this (Google already verified the address).
@@ -34,7 +48,7 @@ model User {
   // signup) so a reset in progress never collides with signup verification.
   reset_code_hash       String?
   reset_code_expires_at DateTime?
-  reset_attempts         Int       @default(0)
+  reset_attempts        Int       @default(0)
 
   projects      Project[]
   votes         Vote[]
@@ -42,8 +56,8 @@ model User {
   notifications Notification[]
   sessions      Session[]
   settings      UserSettings?
-  following     Follow[]      @relation("follower")
-  followers     Follow[]      @relation("following")
+  following     Follow[]       @relation("follower")
+  followers     Follow[]       @relation("following")
 
   @@map("users")
 }
