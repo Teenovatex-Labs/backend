@@ -67,3 +67,11 @@ export const contactLimiter = limiter({
   max: 5,
   message: { error: 'Too many messages — try again in a few minutes', code: 'RATE_LIMITED' },
 });
+
+// Chat is quick back-and-forth, so it gets its own, tighter-per-minute allowance.
+export const messageLimiter = limiter({
+  windowMs: 60_000,
+  max: 20,
+  keyGenerator: byUser,
+  message: { error: "You're sending messages very fast. Take a breath and try again in a moment.", code: 'RATE_LIMITED' },
+});
