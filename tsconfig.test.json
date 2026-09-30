@@ -13,6 +13,7 @@
     "src",
     "test",
     "scripts",
+    "evals",
     "vitest.config.ts"
   ]
 }

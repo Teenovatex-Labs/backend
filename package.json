@@ -19,7 +19,8 @@
     "dev:nowatch": "tsx src/app.ts",
     "role": "tsx scripts/set-role.ts",
     "seed:learn": "tsx scripts/seed-learn.ts",
-    "seed:spaces": "tsx scripts/seed-spaces.ts"
+    "seed:spaces": "tsx scripts/seed-spaces.ts",
+    "eval:pet": "tsx evals/pet-eval.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
