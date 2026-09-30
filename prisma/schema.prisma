@@ -55,24 +55,26 @@ model User {
   reset_code_expires_at DateTime?
   reset_attempts        Int       @default(0)
 
-  projects      Project[]
-  rsvps         EventRsvp[]
-  posts         Post[]
-  conversations ConversationMember[]
-  messages_sent Message[]
-  comments      Comment[]
-  reactions     Reaction[]
-  reports_made  Report[]             @relation("reporter")
-  blocks_made   Block[]              @relation("blocker")
-  blocked_by    Block[]              @relation("blocked")
-  lessons_done  LessonProgress[]
-  votes         Vote[]
-  points_log    PointsLog[]
-  notifications Notification[]
-  sessions      Session[]
-  settings      UserSettings?
-  following     Follow[]             @relation("follower")
-  followers     Follow[]             @relation("following")
+  projects        Project[]
+  rsvps           EventRsvp[]
+  posts           Post[]
+  lab_memberships LabMember[]
+  lab_requests    LabJoinRequest[]
+  conversations   ConversationMember[]
+  messages_sent   Message[]
+  comments        Comment[]
+  reactions       Reaction[]
+  reports_made    Report[]             @relation("reporter")
+  blocks_made     Block[]              @relation("blocker")
+  blocked_by      Block[]              @relation("blocked")
+  lessons_done    LessonProgress[]
+  votes           Vote[]
+  points_log      PointsLog[]
+  notifications   Notification[]
+  sessions        Session[]
+  settings        UserSettings?
+  following       Follow[]             @relation("follower")
+  followers       Follow[]             @relation("following")
 
   @@map("users")
 }
@@ -94,8 +96,13 @@ model Project {
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 
-  user  User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  votes Vote[]
+  user          User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  votes         Vote[]
+  updates       LabUpdate[]
+  tasks         LabTask[]
+  milestones    LabMilestone[]
+  members       LabMember[]
+  join_requests LabJoinRequest[]
 
   @@map("projects")
 }
@@ -220,9 +227,10 @@ model Event {
 }
 
 model EventRsvp {
-  event_id   String
-  user_id    String
-  created_at DateTime @default(now())
+  event_id    String
+  user_id     String
+  created_at  DateTime  @default(now())
+  reminded_at DateTime?
 
   event Event @relation(fields: [event_id], references: [id], onDelete: Cascade)
   user  User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -462,4 +470,105 @@ model Message {
 
   @@index([conversation_id, created_at])
   @@map("messages")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Labs, deeper: build log, planning board, milestones and teams.
+
+model LabUpdate {
+  id         String   @id @default(uuid())
+  lab_id     String
+  author_id  String
+  title      String
+  body       String
+  created_at DateTime @default(now())
+
+  lab Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+
+  @@index([lab_id, created_at])
+  @@map("lab_updates")
+}
+
+enum TaskStatus {
+  backlog
+  in_progress
+  testing
+  done
+}
+
+model LabTask {
+  id          String     @id @default(uuid())
+  lab_id      String
+  title       String
+  notes       String?
+  status      TaskStatus @default(backlog)
+  position    Int        @default(0)
+  assignee_id String?
+  due_at      DateTime?
+  reminded_at DateTime?
+  created_by  String
+  created_at  DateTime   @default(now())
+  done_at     DateTime?
+
+  lab Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+
+  @@index([lab_id, status, position])
+  @@index([due_at])
+  @@map("lab_tasks")
+}
+
+model LabMilestone {
+  id          String    @id @default(uuid())
+  lab_id      String
+  title       String
+  due_at      DateTime?
+  done_at     DateTime?
+  reminded_at DateTime?
+  created_at  DateTime  @default(now())
+
+  lab Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+
+  @@index([lab_id])
+  @@index([due_at])
+  @@map("lab_milestones")
+}
+
+enum LabRole {
+  owner
+  member
+}
+
+model LabMember {
+  lab_id     String
+  user_id    String
+  role       LabRole  @default(member)
+  created_at DateTime @default(now())
+
+  lab  Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+  user User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([lab_id, user_id])
+  @@index([user_id])
+  @@map("lab_members")
+}
+
+enum JoinStatus {
+  pending
+  accepted
+  declined
+}
+
+model LabJoinRequest {
+  id         String     @id @default(uuid())
+  lab_id     String
+  user_id    String
+  message    String?
+  status     JoinStatus @default(pending)
+  created_at DateTime   @default(now())
+
+  lab  Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+  user User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([lab_id, user_id])
+  @@map("lab_join_requests")
 }
