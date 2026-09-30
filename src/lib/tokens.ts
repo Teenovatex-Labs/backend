@@ -2,9 +2,13 @@ import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import type { Request } from 'express';
 import { prisma } from '../db.js';
+import { config } from '../config.js';
 
-const ACCESS_SECRET = process.env.JWT_SECRET ?? 'access-secret';
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET ?? 'refresh-secret';
+const ACCESS_SECRET = config.jwt.access;
+const REFRESH_SECRET = config.jwt.refresh;
+// Password-reset tokens get their own key, derived from the access secret, so a
+// reset token can never be replayed as an access token or the other way round.
+const RESET_SECRET = crypto.createHmac('sha256', ACCESS_SECRET).update('password-reset').digest('hex');
 
 export const generateAccessToken = (userId: string) =>
   jwt.sign({ userId, type: 'access' }, ACCESS_SECRET, { expiresIn: '15m' });
@@ -13,10 +17,13 @@ export const generateRefreshToken = (userId: string) =>
   jwt.sign({ userId, type: 'refresh' }, REFRESH_SECRET, { expiresIn: '7d' });
 
 export const generateResetToken = (userId: string) =>
-  jwt.sign({ userId, type: 'reset' }, ACCESS_SECRET, { expiresIn: '15m' });
+  jwt.sign({ userId, type: 'reset' }, RESET_SECRET, { expiresIn: '15m' });
 
 export const verifyAccessToken = (token: string) =>
   jwt.verify(token, ACCESS_SECRET) as { userId: string; type: string };
+
+export const verifyResetToken = (token: string) =>
+  jwt.verify(token, RESET_SECRET) as { userId: string; type: string };
 
 export const verifyRefreshToken = (token: string) =>
   jwt.verify(token, REFRESH_SECRET) as { userId: string; type: string };

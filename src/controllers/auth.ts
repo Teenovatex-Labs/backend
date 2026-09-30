@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import type { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
@@ -8,6 +9,7 @@ import {
   verifyRefreshToken,
   generateAccessToken,
   generateResetToken,
+  verifyResetToken,
 } from '../lib/tokens.js';
 import { awardPoints } from '../lib/points.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/resend.js';
@@ -22,7 +24,7 @@ import {
 } from '../lib/verification.js';
 import { slugify, uniqueSlug } from '../lib/slug.js';
 
-const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(config.googleClientId);
 
 const issueAndSendVerificationCode = async (userId: string, email: string): Promise<void> => {
   const code = generateVerificationCode();
@@ -336,8 +338,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 
   let decoded: { userId: string; type: string };
   try {
-    const { verifyAccessToken } = await import('../lib/tokens.js');
-    decoded = verifyAccessToken(token);
+    decoded = verifyResetToken(token);
   } catch {
     res.status(400).json({ error: 'Invalid or expired token', code: 'INVALID_TOKEN' });
     return;
@@ -358,7 +359,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 export const googleAuth = async (req: Request, res: Response): Promise<void> => {
   const { id_token } = req.body as { id_token: string };
 
-  if (!process.env.GOOGLE_CLIENT_ID) {
+  if (!config.googleClientId) {
     res.status(500).json({ error: 'Google sign-in is not configured', code: 'GOOGLE_NOT_CONFIGURED' });
     return;
   }
@@ -367,7 +368,7 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
   try {
     const ticket = await googleClient.verifyIdToken({
       idToken: id_token,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: config.googleClientId,
     });
     payload = ticket.getPayload();
   } catch {
