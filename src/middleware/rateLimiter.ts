@@ -75,3 +75,11 @@ export const messageLimiter = limiter({
   keyGenerator: byUser,
   message: { error: "You're sending messages very fast. Take a breath and try again in a moment.", code: 'RATE_LIMITED' },
 });
+
+// The AI brain costs real quota, so it is limited per member per minute on top of the daily cap.
+export const petLimiter = limiter({
+  windowMs: 60_000,
+  max: 10,
+  keyGenerator: byUser,
+  message: { error: 'Give Alfred a moment to think. Try again in a little while.', code: 'RATE_LIMITED' },
+});
