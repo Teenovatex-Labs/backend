@@ -47,7 +47,7 @@ export const castVote = async (req: AuthRequest, res: Response): Promise<void> =
       let awarded = 0;
       if (!isOwn) {
         awarded = VOTE_POINTS;
-        await awardPointsTx(tx, project.user_id, VOTE_POINTS, `Vote received on lab "${project.name}"`, project_id);
+        await awardPointsTx(tx, project.user_id, 'vote_received', VOTE_POINTS, `Vote received on lab "${project.name}"`, project_id);
       }
       return { kind: 'ok', vote_count: updated.vote_count, used: used + 1, awarded };
     });
@@ -104,7 +104,7 @@ export const removeVote = async (req: AuthRequest, res: Response): Promise<void>
     });
     // Take back exactly what this vote earned the lab's owner.
     if (vote.project.user_id !== userId) {
-      await awardPointsTx(tx, vote.project.user_id, -VOTE_POINTS, `Vote removed on lab "${vote.project.name}"`, project_id);
+      await awardPointsTx(tx, vote.project.user_id, 'vote_removed', -VOTE_POINTS, `Vote removed on lab "${vote.project.name}"`, project_id);
     }
     return updated.vote_count;
   });

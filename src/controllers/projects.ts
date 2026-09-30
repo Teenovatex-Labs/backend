@@ -49,7 +49,7 @@ export const createProject = async (req: MulterAuthRequest, res: Response): Prom
   });
 
   if (tx_post_url) {
-    await awardPoints(req.userId!, 5, 'Posted update and tagged TX', project.id);
+    await awardPoints(req.userId!, 'post_tagged', 5, 'Posted update and tagged TX', project.id);
   }
 
   res.status(201).json({

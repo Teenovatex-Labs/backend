@@ -22,9 +22,9 @@ export const recordDailyLogin = async (user: StreakUser, now: Date = new Date())
   const streak = last === shiftDay(today, -1) ? user.streak + 1 : 1;
   await prisma.user.update({ where: { id: user.id }, data: { last_login_at: now, streak } });
 
-  await awardPoints(user.id, DAILY_POINTS, 'Daily login streak');
+  await awardPoints(user.id, 'streak', DAILY_POINTS, 'Daily login streak');
   if (streak % MILESTONE_EVERY === 0) {
-    await awardPoints(user.id, MILESTONE_POINTS, `${streak}-day streak milestone!`);
+    await awardPoints(user.id, 'streak_milestone', MILESTONE_POINTS, `${streak}-day streak milestone!`);
   }
   return streak;
 };

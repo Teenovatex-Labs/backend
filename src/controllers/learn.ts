@@ -98,7 +98,7 @@ export const completeLesson = async (req: AuthRequest, res: Response): Promise<v
   const awarded = await prisma.$transaction(async (tx) => {
     const { count } = await tx.lessonProgress.createMany({ data: [{ user_id: userId, lesson_id: id }], skipDuplicates: true });
     if (count === 0) return 0;
-    await awardPointsTx(tx, userId, LESSON_POINTS, `Finished lesson "${lesson.title}"`, id);
+    await awardPointsTx(tx, userId, 'lesson', LESSON_POINTS, `Finished lesson "${lesson.title}"`, id);
     return LESSON_POINTS;
   });
 
