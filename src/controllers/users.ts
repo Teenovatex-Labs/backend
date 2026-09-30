@@ -123,9 +123,14 @@ export const getUserByUsername = async (req: AuthRequest, res: Response): Promis
       }))
     : false;
 
+  const follows_you = req.userId
+    ? !!(await prisma.follow.findUnique({ where: { follower_id_following_id: { follower_id: user.id, following_id: req.userId } } }))
+    : false;
+
   res.json({
     ...rest,
     private: false,
+    follows_you,
     rank: await getRank(user.points),
     followers: _count.followers,
     following: _count.following,
