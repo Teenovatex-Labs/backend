@@ -34,10 +34,36 @@ export const getMyPoints = async (req: AuthRequest, res: Response): Promise<void
 };
 
 export const getLeaderboard = async (req: Request, res: Response): Promise<void> => {
-  const { limit = '10', page = '1' } = req.query as Record<string, string | undefined>;
-  const limitNum = Math.min(100, parseInt(limit ?? '10'));
-  const pageNum = Math.max(1, parseInt(page ?? '1'));
+  const { limit = '10', page = '1', period = 'all' } = req.query as Record<string, string | undefined>;
+  const limitNum = Math.min(100, Math.max(1, parseInt(limit ?? '10') || 10));
+  const pageNum = Math.max(1, parseInt(page ?? '1') || 1);
   const skip = (pageNum - 1) * limitNum;
+
+  if (period === 'week') {
+    // A fresh race every week: points earned in the last 7 days, so a newcomer can catch up.
+    const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const grouped = await prisma.pointsLog.groupBy({
+      by: ['user_id'],
+      where: { created_at: { gte: since }, points: { gt: 0 } },
+      _sum: { points: true },
+      orderBy: { _sum: { points: 'desc' } },
+      skip,
+      take: limitNum,
+    });
+    const people = await prisma.user.findMany({
+      where: { id: { in: grouped.map((g) => g.user_id) } },
+      select: { id: true, username: true, avatar_url: true, _count: { select: { votes: true } } },
+    });
+    const byId = new Map(people.map((p) => [p.id, p]));
+    res.json({
+      period: 'week',
+      leaderboard: grouped.flatMap((g, i) => {
+        const p = byId.get(g.user_id);
+        return p ? [{ rank: skip + i + 1, username: p.username, avatar_url: p.avatar_url, points: g._sum.points ?? 0, vote_count: p._count.votes }] : [];
+      }),
+    });
+    return;
+  }
 
   const users = await prisma.user.findMany({
     orderBy: { points: 'desc' },
@@ -60,5 +86,5 @@ export const getLeaderboard = async (req: Request, res: Response): Promise<void>
     vote_count: u._count.votes,
   }));
 
-  res.json({ leaderboard });
+  res.json({ period: 'all', leaderboard });
 };
