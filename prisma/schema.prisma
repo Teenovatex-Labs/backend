@@ -58,19 +58,21 @@ model User {
   projects      Project[]
   rsvps         EventRsvp[]
   posts         Post[]
+  conversations ConversationMember[]
+  messages_sent Message[]
   comments      Comment[]
   reactions     Reaction[]
-  reports_made  Report[]         @relation("reporter")
-  blocks_made   Block[]          @relation("blocker")
-  blocked_by    Block[]          @relation("blocked")
+  reports_made  Report[]             @relation("reporter")
+  blocks_made   Block[]              @relation("blocker")
+  blocked_by    Block[]              @relation("blocked")
   lessons_done  LessonProgress[]
   votes         Vote[]
   points_log    PointsLog[]
   notifications Notification[]
   sessions      Session[]
   settings      UserSettings?
-  following     Follow[]         @relation("follower")
-  followers     Follow[]         @relation("following")
+  following     Follow[]             @relation("follower")
+  followers     Follow[]             @relation("following")
 
   @@map("users")
 }
@@ -400,4 +402,49 @@ model Reaction {
 
   @@id([user_id, post_id])
   @@map("reactions")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Messages. One-to-one for now. You can only message someone you follow and who follows you back.
+
+model Conversation {
+  id         String   @id @default(uuid())
+  // The two member ids, sorted and joined, so a pair can only ever have one conversation.
+  pair_key   String   @unique
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  members  ConversationMember[]
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversation_id String
+  user_id         String
+  last_read_at    DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([conversation_id, user_id])
+  @@index([user_id])
+  @@map("conversation_members")
+}
+
+model Message {
+  id              String   @id @default(uuid())
+  conversation_id String
+  sender_id       String
+  body            String
+  created_at      DateTime @default(now())
+  // Hidden by the sender (unsend) or by a moderator. Kept for the audit trail, never shown to members.
+  hidden          Boolean  @default(false)
+
+  conversation Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+
+  @@index([conversation_id, created_at])
+  @@map("messages")
 }
