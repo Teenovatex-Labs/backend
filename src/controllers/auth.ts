@@ -15,6 +15,7 @@ import {
   verifyResetToken,
 } from '../lib/tokens.js';
 import { recordDailyLogin } from '../lib/streak.js';
+import { promoteIfAdminEmail } from '../lib/adminEmails.js';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../lib/resend.js';
 import {
   generateVerificationCode,
@@ -164,6 +165,7 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
     },
   });
 
+  await promoteIfAdminEmail(user); // reached only after the email is verified (code, password on a verified account, or Google)
   await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
@@ -225,6 +227,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  await promoteIfAdminEmail(user); // reached only after the email is verified (code, password on a verified account, or Google)
   await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
@@ -456,6 +459,7 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     }
   }
 
+  await promoteIfAdminEmail(user); // reached only after the email is verified (code, password on a verified account, or Google)
   await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
