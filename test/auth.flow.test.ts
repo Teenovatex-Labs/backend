@@ -27,6 +27,7 @@ const signup = {
   username: 'ada_l',
   email: 'ada@example.com',
   password: 'Sup3rSecret',
+  birth_date: '2008-05-10',
 };
 
 describe('sign-up, verification and login', () => {
