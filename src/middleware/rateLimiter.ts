@@ -83,3 +83,11 @@ export const petLimiter = limiter({
   keyGenerator: byUser,
   message: { error: 'Give Alfred a moment to think. Try again in a little while.', code: 'RATE_LIMITED' },
 });
+
+// Typing into a search box fires many requests, so it gets its own, roomier allowance.
+export const searchLimiter = limiter({
+  windowMs: 60_000,
+  max: 60,
+  keyGenerator: byUser,
+  message: { error: 'Slow down a little and try again shortly', code: 'RATE_LIMITED' },
+});
