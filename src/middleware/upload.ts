@@ -1,10 +1,12 @@
 import multer from 'multer';
 import { v2 as cloudinary } from 'cloudinary';
+import { config } from '../config.js';
+import { HttpError } from '../lib/errors.js';
 
 cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  cloud_name: config.cloudinary.cloudName,
+  api_key: config.cloudinary.apiKey,
+  api_secret: config.cloudinary.apiSecret,
 });
 
 export const upload = multer({
@@ -12,7 +14,7 @@ export const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (file.mimetype.startsWith('image/')) cb(null, true);
-    else cb(new Error('Only image files allowed'));
+    else cb(new HttpError(400, 'INVALID_FILE_TYPE', 'Only image files are allowed'));
   },
 });
 
