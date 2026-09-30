@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 import { uploadToCloudinary } from '../middleware/upload.js';
+import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 
 const publicSelect = {
   id: true,
@@ -29,6 +30,9 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       settings: true,
       password_hash: true,
       google_id: true,
+      birth_date: true,
+      timezone: true,
+      role: true,
     },
   });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
@@ -36,9 +40,12 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   // Never send the hash itself — just whether one exists, so the frontend
   // can prompt a Google-only account to add a password without another
   // round trip.
-  const { password_hash, google_id, ...rest } = user;
+  const { password_hash, google_id, birth_date, ...rest } = user;
   res.json({
     ...rest,
+    // Members see their own birth date; it is never part of any public profile.
+    birth_date: birth_date ? birth_date.toISOString().slice(0, 10) : null,
+    age_confirmed: birth_date !== null,
     has_password: !!password_hash,
     has_google: !!google_id,
     rank: await getRank(user.points),
@@ -50,6 +57,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
     full_name?: string;
     bio?: string;
     social_links?: Record<string, string>;
+    timezone?: string;
   };
 
   const updated = await prisma.user.update({
@@ -58,6 +66,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
       ...(body.full_name !== undefined && { full_name: body.full_name }),
       ...(body.bio !== undefined && { bio: body.bio }),
       ...(body.social_links !== undefined && { social_links: body.social_links }),
+      ...(body.timezone !== undefined && { timezone: body.timezone }),
     },
     select: publicSelect,
   });
@@ -131,4 +140,29 @@ export const unfollowUser = async (req: AuthRequest, res: Response): Promise<voi
   });
 
   res.json({ message: `Unfollowed ${username}` });
+};
+
+// For accounts created before the age gate (and Google sign-ups): set once, never edited
+// by the member afterwards. Under-13 accounts are removed entirely.
+export const setBirthDate = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { birth_date } = req.body as { birth_date: string };
+  const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { birth_date: true } });
+  if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
+  if (user.birth_date) {
+    res.status(409).json({ error: 'Your date of birth is already set. Contact us if it needs correcting.', code: 'ALREADY_SET' });
+    return;
+  }
+
+  if (ageOn(birth_date) < MIN_AGE) {
+    await prisma.user.delete({ where: { id: req.userId } });
+    res.status(403).json({
+      error: `TeenovateX is for ages ${MIN_AGE} and up, so we've removed this account. Come back when you're ${MIN_AGE}!`,
+      code: 'AGE_TOO_YOUNG',
+      account_removed: true,
+    });
+    return;
+  }
+
+  await prisma.user.update({ where: { id: req.userId }, data: { birth_date: toDbDate(birth_date) } });
+  res.json({ message: 'Thanks, all set', age_confirmed: true });
 };

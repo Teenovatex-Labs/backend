@@ -23,6 +23,7 @@ import {
   MAX_VERIFICATION_ATTEMPTS,
 } from '../lib/verification.js';
 import { slugify, uniqueSlug } from '../lib/slug.js';
+import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 
 const googleClient = new OAuth2Client(config.googleClientId);
 
@@ -40,12 +41,23 @@ const issueAndSendVerificationCode = async (userId: string, email: string): Prom
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { full_name, username, email, password } = req.body as {
+  const { full_name, username, email, password, birth_date, timezone } = req.body as {
     full_name: string;
     username: string;
     email: string;
     password: string;
+    birth_date: string;
+    timezone?: string;
   };
+
+  // Checked before anything is stored: an under-13 sign-up leaves no trace.
+  if (ageOn(birth_date) < MIN_AGE) {
+    res.status(403).json({
+      error: `TeenovateX is for ages ${MIN_AGE} and up. Come back when you're ${MIN_AGE}!`,
+      code: 'AGE_TOO_YOUNG',
+    });
+    return;
+  }
 
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
 
@@ -79,7 +91,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const password_hash = await bcrypt.hash(password, 12);
     const user = await prisma.user.update({
       where: { id: existingByEmail.id },
-      data: { full_name, username, password_hash },
+      data: { full_name, username, password_hash, birth_date: toDbDate(birth_date), timezone },
     });
     await issueAndSendVerificationCode(user.id, user.email);
 
@@ -99,7 +111,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
   const password_hash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: { full_name, username, email, password_hash, settings: { create: {} } },
+    data: { full_name, username, email, password_hash, birth_date: toDbDate(birth_date), timezone, settings: { create: {} } },
   });
   await issueAndSendVerificationCode(user.id, user.email);
 
