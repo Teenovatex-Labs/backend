@@ -651,3 +651,15 @@ model PetAction {
   @@map("pet_actions")
 }
 
+// Short things a member asked Alfred to remember ("I hate gradients"). Visible and deletable by them.
+model PetMemory {
+  id         String   @id @default(uuid())
+  user_id    String
+  text       String
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@map("pet_memories")
+}
