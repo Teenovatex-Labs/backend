@@ -78,6 +78,8 @@ model User {
   following       Follow[]             @relation("follower")
   followers       Follow[]             @relation("following")
   userBadges      UserBadge[]
+  petActions      PetAction[]
+  petMemories     PetMemory[]
 
   @@map("users")
 }
@@ -631,3 +633,21 @@ model QuestClaim {
   @@id([user_id, day])
   @@map("quest_claims")
 }
+
+// Everything Alfred did for a member on their say-so, so they can see it and (for a while) undo it.
+model PetAction {
+  id         String    @id @default(uuid())
+  user_id    String
+  kind       String
+  summary    String
+  // What is needed to undo it (a username, a lab id, notification ids). Never message content.
+  payload    Json?
+  undone_at  DateTime?
+  created_at DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@map("pet_actions")
+}
+
