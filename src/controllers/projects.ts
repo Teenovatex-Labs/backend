@@ -33,6 +33,7 @@ export const createProject = async (req: MulterAuthRequest, res: Response): Prom
 
   const project = await prisma.project.create({
     data: {
+      members: { create: { user_id: req.userId!, role: 'owner' } },
       user_id: req.userId!,
       name,
       slug,
