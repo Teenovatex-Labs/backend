@@ -5,6 +5,7 @@ import { slugify, uniqueSlug } from '../lib/slug.js';
 import { awardPoints } from '../lib/points.js';
 import { uploadToCloudinary } from '../middleware/upload.js';
 import { createProjectSchema } from '../schemas/project.js';
+import { dayToDb, localDay } from '../lib/day.js';
 
 type MulterAuthRequest = AuthRequest & { file?: Express.Multer.File };
 
@@ -59,11 +60,25 @@ export const createProject = async (req: MulterAuthRequest, res: Response): Prom
   });
 };
 
-export const listProjects = async (req: Request, res: Response): Promise<void> => {
+const TRENDING_WINDOW_DAYS = 7;
+const userInclude = { user: { select: { username: true, avatar_url: true } } } as const;
+
+/** Which of these projects the signed-in member has already voted on today (their day). */
+const votedTodayIds = async (userId: string | undefined, projectIds: string[]): Promise<Set<string>> => {
+  if (!userId || projectIds.length === 0) return new Set();
+  const me = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  const votes = await prisma.vote.findMany({
+    where: { user_id: userId, project_id: { in: projectIds }, vote_day: dayToDb(localDay(me?.timezone)) },
+    select: { project_id: true },
+  });
+  return new Set(votes.map((v) => v.project_id));
+};
+
+export const listProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   const { page = '1', limit = '12', sort = 'newest', category, search } = req.query as Record<string, string | undefined>;
 
-  const pageNum = Math.max(1, parseInt(page ?? '1'));
-  const limitNum = Math.min(50, parseInt(limit ?? '12'));
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 12));
   const skip = (pageNum - 1) * limitNum;
 
   const where = {
@@ -78,35 +93,74 @@ export const listProjects = async (req: Request, res: Response): Promise<void> =
       : {}),
   };
 
-  const orderBy =
-    sort === 'votes' || sort === 'trending'
-      ? { vote_count: 'desc' as const }
-      : { created_at: 'desc' as const };
+  let projects;
+  let total: number;
 
-  const [projects, total] = await prisma.$transaction([
-    prisma.project.findMany({
-      where,
-      orderBy,
-      skip,
-      take: limitNum,
-      include: { user: { select: { username: true, avatar_url: true } } },
-    }),
-    prisma.project.count({ where }),
-  ]);
+  if (sort === 'trending') {
+    // Trending = votes received in the last week, ties broken by all-time votes then newest.
+    const since = new Date(Date.now() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [all, recent] = await Promise.all([
+      prisma.project.findMany({ where, select: { id: true, vote_count: true, created_at: true } }),
+      prisma.vote.groupBy({ by: ['project_id'], where: { voted_at: { gte: since }, project: where }, _count: { _all: true } }),
+    ]);
+    const weekly = new Map(recent.map((r) => [r.project_id, r._count._all]));
+    const ranked = all
+      .sort(
+        (x, y) =>
+          (weekly.get(y.id) ?? 0) - (weekly.get(x.id) ?? 0) ||
+          y.vote_count - x.vote_count ||
+          y.created_at.getTime() - x.created_at.getTime()
+      )
+      .slice(skip, skip + limitNum);
+    const found = await prisma.project.findMany({ where: { id: { in: ranked.map((r) => r.id) } }, include: userInclude });
+    const byId = new Map(found.map((p) => [p.id, p]));
+    projects = ranked.map((r) => byId.get(r.id)!).filter(Boolean);
+    total = all.length;
+  } else {
+    const orderBy = sort === 'votes' ? { vote_count: 'desc' as const } : { created_at: 'desc' as const };
+    [projects, total] = await prisma.$transaction([
+      prisma.project.findMany({ where, orderBy, skip, take: limitNum, include: userInclude }),
+      prisma.project.count({ where }),
+    ]);
+  }
 
-  res.json({ projects, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+  const voted = await votedTodayIds(req.userId, projects.map((p) => p.id));
+  res.json({
+    projects: projects.map((p) => ({ ...p, has_voted_today: voted.has(p.id) })),
+    total,
+    page: pageNum,
+    pages: Math.ceil(total / limitNum),
+  });
 };
 
-export const getProject = async (req: Request, res: Response): Promise<void> => {
+export const listMyProjects = async (req: AuthRequest, res: Response): Promise<void> => {
+  const projects = await prisma.project.findMany({
+    where: { user_id: req.userId },
+    orderBy: { created_at: 'desc' },
+    include: userInclude,
+  });
+  res.json({ projects, total: projects.length });
+};
+
+export const listCategories = async (_req: Request, res: Response): Promise<void> => {
+  const groups = await prisma.project.groupBy({ by: ['category'], _count: { _all: true }, orderBy: { category: 'asc' } });
+  res.json({ categories: groups.map((g) => ({ name: g.category, count: g._count._all })) });
+};
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// A lab can be opened by its id or by its readable slug (what the address bar shows).
+export const getProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
   const project = await prisma.project.findUnique({
-    where: { id },
+    where: UUID.test(id) ? { id } : { slug: id },
     include: { user: { select: { username: true, full_name: true, avatar_url: true } } },
   });
 
   if (!project) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
-  res.json(project);
+  const voted = await votedTodayIds(req.userId, [project.id]);
+  res.json({ ...project, has_voted_today: voted.has(project.id) });
 };
 
 export const updateProject = async (req: AuthRequest, res: Response): Promise<void> => {

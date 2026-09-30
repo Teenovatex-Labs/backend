@@ -26,6 +26,20 @@ export const requireAuth = (req: AuthRequest, res: Response, next: NextFunction)
   }
 };
 
+/** Reads the token if there is a valid one, but lets anonymous visitors through too. */
+export const optionalAuth = (req: AuthRequest, _res: Response, next: NextFunction): void => {
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) {
+    try {
+      const decoded = verifyAccessToken(header.slice(7));
+      if (decoded.type === 'access') req.userId = decoded.userId;
+    } catch {
+      // A bad or expired token on a public page just means "not signed in".
+    }
+  }
+  next();
+};
+
 /** Only members whose role is one of `roles` may continue. Always place after requireAuth. */
 export const requireRole =
   (...roles: Role[]) =>
