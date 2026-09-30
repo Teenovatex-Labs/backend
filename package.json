@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
     "db:local": "tsx scripts/local-db.ts",
-    "dev:nowatch": "tsx src/app.ts"
+    "dev:nowatch": "tsx src/app.ts",
+    "role": "tsx scripts/set-role.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
