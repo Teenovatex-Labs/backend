@@ -14,7 +14,9 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "db:local": "tsx scripts/local-db.ts",
+    "dev:nowatch": "tsx src/app.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
