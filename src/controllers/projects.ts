@@ -215,3 +215,24 @@ export const deleteProject = async (req: AuthRequest, res: Response): Promise<vo
   await prisma.project.delete({ where: { id } });
   res.json({ message: 'Project deleted' });
 };
+
+// --- cover image ------------------------------------------------------------------------------
+
+/** Puts a new cover on a lab the member owns, or (with no file) says so. */
+export const setCover = async (req: MulterAuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const lab = await prisma.project.findUnique({ where: { id }, select: { user_id: true } });
+  if (!lab) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
+  if (lab.user_id !== req.userId) { res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' }); return; }
+  if (!req.file) { res.status(400).json({ error: 'Choose an image first', code: 'NO_FILE' }); return; }
+  const cover_url = await uploadToCloudinary(req.file.buffer, 'projects');
+  await prisma.project.update({ where: { id }, data: { cover_url } });
+  res.json({ cover_url });
+};
+
+export const clearCover = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const { count } = await prisma.project.updateMany({ where: { id, user_id: req.userId }, data: { cover_url: null } });
+  if (count === 0) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
+  res.json({ cover_url: null });
+};

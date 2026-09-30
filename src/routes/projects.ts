@@ -7,6 +7,8 @@ import {
   getProject,
   updateProject,
   deleteProject,
+  setCover,
+  clearCover,
 } from '../controllers/projects.js';
 import { castVote, removeVote } from '../controllers/votes.js';
 import { optionalAuth, requireAgeConfirmed, requireAuth } from '../middleware/auth.js';
@@ -24,6 +26,8 @@ router.post('/', requireAuth, requireAgeConfirmed, writeLimiter, upload.single('
 router.get('/:id', optionalAuth, getProject);
 router.patch('/:id', requireAuth, validate(updateProjectSchema), updateProject);
 router.delete('/:id', requireAuth, deleteProject);
+router.put('/:id/cover', requireAuth, writeLimiter, upload.single('cover_image'), setCover);
+router.delete('/:id/cover', requireAuth, clearCover);
 
 // Voting sub-resource
 router.post('/:id/vote', requireAuth, requireAgeConfirmed, voteLimiter, castVote);
