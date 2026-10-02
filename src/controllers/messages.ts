@@ -318,5 +318,5 @@ export const getImageLink = async (req: AuthRequest, res: Response): Promise<voi
     if (!isSender && (a.status !== 'approved' || a.message.hidden)) throw new HttpError(403, 'NOT_APPROVED', 'This image is waiting for a moderator.');
     if (isSender && a.status === 'rejected') throw new HttpError(403, 'REMOVED', 'This image was removed by a moderator.');
   }
-  res.json({ url: signedImageUrl(a.public_id) });
+  res.json({ url: signedImageUrl(a.public_id), status: a.status });
 };
