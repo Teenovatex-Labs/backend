@@ -9,6 +9,13 @@ cloudinary.config({
   api_secret: config.cloudinary.apiSecret,
 });
 
+const assertConfigured = () => {
+  const c = config.cloudinary;
+  if (!c.cloudName || !c.apiKey || !c.apiSecret) {
+    throw new HttpError(503, 'UPLOADS_NOT_CONFIGURED', "Photo uploads aren't switched on yet. Please try again later.");
+  }
+};
+
 export const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -20,6 +27,7 @@ export const upload = multer({
 
 export const uploadToCloudinary = (buffer: Buffer, folder: string): Promise<string> =>
   new Promise((resolve, reject) => {
+    assertConfigured();
     cloudinary.uploader
       .upload_stream({ folder, resource_type: 'image' }, (err, result) => {
         if (err ?? !result) reject(err ?? new Error('Upload failed'));
@@ -44,6 +52,7 @@ export const attachmentUpload = multer({
 
 export const uploadPrivateImage = (buffer: Buffer, folder: string): Promise<{ public_id: string }> =>
   new Promise((resolve, reject) => {
+    assertConfigured();
     cloudinary.uploader
       .upload_stream({ folder, resource_type: 'image', type: 'authenticated' }, (err, result) => {
         if (err ?? !result) reject(err ?? new Error('Upload failed'));
