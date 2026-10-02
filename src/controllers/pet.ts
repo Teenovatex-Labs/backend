@@ -29,7 +29,15 @@ export const status = async (req: AuthRequest, res: Response): Promise<void> => 
     enabled_by_member: settings?.ai_chat ?? false,
     remaining_today: Math.max(0, config.pet.dailyLimit - (used?.count ?? 0)),
     daily_limit: config.pet.dailyLimit,
+    tour_done: !!settings?.alfred_tour_done_at,
   });
+};
+
+/** The member finished or skipped the welcome tour. It never shows again, on any device. */
+export const tourDone = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.userId!;
+  await prisma.userSettings.upsert({ where: { user_id: userId }, create: { user_id: userId, alfred_tour_done_at: new Date() }, update: { alfred_tour_done_at: new Date() } });
+  res.json({ tour_done: true });
 };
 
 export const brain = async (req: AuthRequest, res: Response): Promise<void> => {

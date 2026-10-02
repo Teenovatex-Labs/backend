@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { addMemory, brain, forgetMemory, listActions, listMemories, logAction, petActionSchema, status, undoAction } from '../controllers/pet.js';
+import { addMemory, brain, forgetMemory, listActions, listMemories, logAction, petActionSchema, status, tourDone, undoAction } from '../controllers/pet.js';
 import { requireActiveMember, requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { petLimiter, writeLimiter } from '../middleware/rateLimiter.js';
@@ -9,6 +9,7 @@ const router = Router();
 router.use(requireAuth);
 
 router.get('/status', status);
+router.post('/tour-done', tourDone);
 router.post(
   '/brain',
   requireActiveMember,
