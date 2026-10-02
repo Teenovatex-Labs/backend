@@ -214,6 +214,8 @@ model UserSettings {
   // Alfred's AI brain sends what you type to Alfred to Google or Groq. Off until the member opts in.
   ai_chat             Boolean   @default(false)
   ai_consented_at     DateTime?
+  // When the member finished or skipped Alfred's welcome tour. It shows once per account, on any device.
+  alfred_tour_done_at DateTime?
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
