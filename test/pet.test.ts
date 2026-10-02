@@ -83,7 +83,7 @@ describe('who may use the brain', () => {
     const me = await optedIn();
     await ask(me.auth);
     const st = await request(app).get('/api/v1/pet/status').set(me.auth);
-    expect(st.body).toEqual({ available: true, enabled_by_member: true, remaining_today: 39, daily_limit: 40 });
+    expect(st.body).toEqual({ available: true, enabled_by_member: true, remaining_today: 39, daily_limit: 40, tour_done: false });
   });
 });
 
@@ -255,5 +255,15 @@ describe('daily allowance', () => {
     const me = await optedIn();
     expect((await ask(me.auth, '   ')).status).toBe(400);
     expect((await ask(me.auth, 'x'.repeat(501))).status).toBe(400);
+  });
+});
+
+describe('the welcome tour', () => {
+  it('is offered once per account: new members have not done it, and finishing it sticks', async () => {
+    const me = await makeUser();
+    expect((await request(app).get('/api/v1/pet/status').set(me.auth)).body.tour_done).toBe(false);
+    expect((await request(app).post('/api/v1/pet/tour-done').set(me.auth)).status).toBe(200);
+    expect((await request(app).get('/api/v1/pet/status').set(me.auth)).body.tour_done).toBe(true);
+    expect((await request(app).post('/api/v1/pet/tour-done')).status).toBe(401);
   });
 });
