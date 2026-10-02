@@ -27,6 +27,7 @@ import pointsRouter from './routes/points.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import notificationsRouter from './routes/notifications.js';
 import settingsRouter from './routes/settings.js';
+import pushRouter from './routes/push.js';
 import contactRouter from './routes/contact.js';
 
 const app = express();
@@ -74,6 +75,7 @@ app.use(`${v1}/points`, pointsRouter);
 app.use(`${v1}/leaderboard`, leaderboardRouter);
 app.use(`${v1}/notifications`, notificationsRouter);
 app.use(`${v1}/settings`, settingsRouter);
+app.use(`${v1}/push`, pushRouter);
 app.use(`${v1}/contact`, contactRouter);
 
 app.get('/', (_req, res) => res.json({ status: 'TX API v1 running' }));
