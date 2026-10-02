@@ -683,3 +683,15 @@ model PushSubscription {
 
   @@index([user_id])
 }
+
+// One reward taken from a week's challenges (or the all-three bonus, key "bonus"). The key makes a
+// double claim impossible.
+model WeeklyClaim {
+  user_id    String
+  week       DateTime @db.Date // the Monday that starts the member's week
+  key        String
+  claimed_at DateTime @default(now())
+
+  @@id([user_id, week, key])
+  @@map("weekly_claims")
+}
