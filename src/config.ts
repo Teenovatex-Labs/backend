@@ -43,6 +43,10 @@ const buildSchema = (isProduction: boolean) => {
       // Alfred's brain: free-tier providers tried in order, each with any number of keys
       // (comma-separated) so a spare key takes over when one is rate-limited.
       GEMINI_API_KEYS: z.string().optional(),
+      // Web push. Without both keys, push is simply off.
+      VAPID_PUBLIC_KEY: z.string().optional(),
+      VAPID_PRIVATE_KEY: z.string().optional(),
+      VAPID_SUBJECT: z.string().default('mailto:hello@teenovatex.org'),
       GEMINI_MODEL: z.string().default('gemini-flash-lite-latest'),
       GROQ_API_KEYS: z.string().optional(),
       GROQ_MODEL: z.string().default('openai/gpt-oss-20b'),
@@ -88,6 +92,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
       gemini: { keys: splitKeys(c.GEMINI_API_KEYS), model: c.GEMINI_MODEL },
       groq: { keys: splitKeys(c.GROQ_API_KEYS), model: c.GROQ_MODEL },
     },
+    push: { publicKey: c.VAPID_PUBLIC_KEY, privateKey: c.VAPID_PRIVATE_KEY, subject: c.VAPID_SUBJECT },
     cloudinary: {
       cloudName: c.CLOUDINARY_CLOUD_NAME,
       apiKey: c.CLOUDINARY_API_KEY,
