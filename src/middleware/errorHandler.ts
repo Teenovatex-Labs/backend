@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import { HttpError } from '../lib/errors.js';
+import { reportError } from '../lib/monitor.js';
 
 export const notFound = (_req: Request, res: Response): void => {
   res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
@@ -34,5 +35,6 @@ export const errorHandler = (err: unknown, _req: Request, res: Response, _next: 
   }
 
   console.error('Unhandled error:', err);
+  reportError(err);
   res.status(500).json({ error: 'Something went wrong on our side', code: 'INTERNAL_ERROR' });
 };
