@@ -81,6 +81,7 @@ model User {
   petActions        PetAction[]
   petMemories       PetMemory[]
   pushSubscriptions PushSubscription[]
+  attachments       MessageAttachment[]
 
   @@map("users")
 }
@@ -482,8 +483,9 @@ model Message {
   // Hidden by the sender (unsend) or by a moderator. Kept for the audit trail, never shown to members.
   hidden          Boolean  @default(false)
 
-  conversation Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
-  sender       User         @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+  conversation Conversation       @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender       User               @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+  attachment   MessageAttachment?
 
   @@index([conversation_id, created_at])
   @@map("messages")
@@ -694,4 +696,35 @@ model WeeklyClaim {
 
   @@id([user_id, week, key])
   @@map("weekly_claims")
+}
+
+enum AttachmentStatus {
+  pending
+  approved
+  rejected
+}
+
+// An image sent in a lab team chat. Stored privately and only shown to the team once a moderator
+// approves it. The file is re-encoded on upload, so it carries no location or camera data.
+model MessageAttachment {
+  id          String           @id @default(uuid())
+  message_id  String           @unique
+  uploader_id String
+  public_id   String
+  width       Int
+  height      Int
+  status      AttachmentStatus @default(pending)
+  reviewed_by String?
+  reviewed_at DateTime?
+  // Set when a moderator rejects it as a serious safety matter: the file is kept (privately) as evidence.
+  escalated   Boolean          @default(false)
+  note        String?
+  created_at  DateTime         @default(now())
+
+  message  Message @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  uploader User    @relation(fields: [uploader_id], references: [id], onDelete: Cascade)
+
+  @@index([status, created_at])
+  @@index([uploader_id, created_at])
+  @@map("message_attachments")
 }
