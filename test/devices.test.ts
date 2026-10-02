@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/db.js';
 import { describeDevice } from '../src/lib/device.js';
+import { describeLocation } from '../src/lib/geo.js';
 import { createSession, generateAccessToken } from '../src/lib/tokens.js';
 import { makeUser } from './factories.js';
 import { resetDb } from './helpers.js';
@@ -23,15 +24,26 @@ describe('describeDevice', () => {
   });
 });
 
+describe('describeLocation', () => {
+  it('names the country for a public address and says nothing for a private one', async () => {
+    expect(await describeLocation('41.78.100.66')).toMatch(/Nigeria/);
+    expect(await describeLocation('::ffff:41.78.100.66')).toMatch(/Nigeria/);
+    expect(await describeLocation('127.0.0.1')).toBeNull();
+    expect(await describeLocation(null)).toBeNull();
+  });
+});
+
 describe('device list', () => {
   it('shows readable names, finds this device, and can sign out the others', async () => {
     const { user } = await makeUser();
-    const here = await createSession(user.id, { headers: { 'user-agent': CHROME_LINUX }, ip: '1.1.1.1' } as never);
-    await createSession(user.id, { headers: { 'user-agent': CHROME_ANDROID }, ip: '2.2.2.2' } as never);
+    const here = await createSession(user.id, { headers: { 'user-agent': CHROME_LINUX }, ip: '10.0.0.1' } as never);
+    await createSession(user.id, { headers: { 'user-agent': CHROME_ANDROID }, ip: '192.168.0.2' } as never);
     const auth = { Authorization: `Bearer ${generateAccessToken(user.id)}` };
 
     const list = await request(app).get('/api/v1/settings/sessions').set(auth);
     expect(list.body.map((s: { device: { label: string } }) => s.device.label).sort()).toEqual(['Chrome on Android', 'Chrome on Linux']);
+
+    expect(list.body.every((s: { location: string | null }) => s.location === null)).toBe(true); // private test addresses have no location
 
     const me = await request(app).post('/api/v1/settings/sessions/current').set(auth).send({ refresh_token: here.refresh_token });
     const mine = list.body.find((s: { device: { label: string } }) => s.device.label === 'Chrome on Linux');

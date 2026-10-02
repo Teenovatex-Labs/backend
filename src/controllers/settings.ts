@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { verifyGoogleToken } from '../lib/google.js';
 import { describeDevice } from '../lib/device.js';
+import { describeLocation } from '../lib/geo.js';
 import { hashToken } from '../lib/tokens.js';
 
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -47,7 +48,11 @@ export const getSessions = async (req: AuthRequest, res: Response): Promise<void
     select: { id: true, device_info: true, ip: true, last_active: true, created_at: true },
     orderBy: { last_active: 'desc' },
   });
-  res.json(sessions.map(({ device_info, ...s }) => ({ ...s, device_info, device: describeDevice(device_info) })));
+  res.json(
+    await Promise.all(
+      sessions.map(async ({ device_info, ...s }) => ({ ...s, device_info, device: describeDevice(device_info), location: await describeLocation(s.ip) })),
+    ),
+  );
 };
 
 /** Which of the member's sessions is the one making this request, found from their own refresh token. */
