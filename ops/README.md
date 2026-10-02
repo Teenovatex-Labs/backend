@@ -22,3 +22,6 @@ The dump uses `--clean --if-exists`, so restoring replaces existing tables. Try 
 ## Environment
 
 See `.env.example`. Secrets (AI provider keys, `ADMIN_EMAILS`) live only in `/home/TeenovateX-Labs/backend/.env` on the server.
+
+## nginx upload size
+The API's nginx site (`/etc/nginx/sites-enabled/api.teenovatex.org`) must set `client_max_body_size 6m;`. nginx's default is 1 MB, which silently rejected profile photos, lab covers and chat images with a 413 before the app saw them. The app itself caps uploads at 5 MB, and the browser shrinks photos before sending. After editing: `nginx -t && systemctl reload nginx`.
