@@ -7,6 +7,8 @@ import { SELF_HARM_MESSAGE } from '../lib/contentFilter.js';
 import { createNotification } from '../lib/notify.js';
 import { blockedEitherWay } from './safety.js';
 import { publish } from '../lib/realtime.js';
+import { assertCanSendImage, cleanImage } from '../lib/attachments.js';
+import { signedImageUrl, uploadPrivateImage } from '../middleware/upload.js';
 
 const PAGE = 50;
 const pairKey = (a: string, b: string) => [a, b].sort().join(':');
@@ -163,6 +165,7 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
     },
     orderBy: { created_at: validAfter ? 'asc' : 'desc' },
     take: PAGE,
+    include: { attachment: { select: { id: true, status: true, width: true, height: true } } },
   });
   const names = new Map(convo.members.map((m) => [m.user_id, m.user.username]));
   const messages = (validAfter ? rows : rows.reverse()).map((m) => ({
@@ -171,6 +174,7 @@ export const getMessages = async (req: AuthRequest, res: Response): Promise<void
     created_at: m.created_at,
     from_me: m.sender_id === userId,
     ...(convo.lab_id ? { from_name: names.get(m.sender_id) ?? 'former member' } : {}),
+    image: m.attachment ? { id: m.attachment.id, status: m.attachment.status, width: m.attachment.width, height: m.attachment.height } : null,
   }));
 
   // Opening a thread marks it read up to now.
@@ -247,4 +251,72 @@ export const unsend = async (req: AuthRequest, res: Response): Promise<void> => 
   const { count } = await prisma.message.updateMany({ where: { id, sender_id: req.userId, hidden: false }, data: { hidden: true } });
   if (count === 0) throw new HttpError(404, 'NOT_FOUND', 'Message not found');
   res.json({ message: 'Message removed' });
+};
+
+// --- images in team chats -----------------------------------------------------------------------
+// Phase one of attachments: images only, in lab team chats only, and nobody but the sender and the
+// moderators sees one until a moderator approves it.
+
+export const sendImage = async (req: AuthRequest & { file?: Express.Multer.File }, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.userId!;
+  if (!req.file) throw new HttpError(400, 'NO_FILE', 'Choose an image to send');
+  const caption = typeof (req.body as { body?: unknown }).body === 'string' ? (req.body as { body: string }).body.trim().slice(0, 500) : '';
+
+  const { convo } = await membership(id, userId);
+  if (!convo.lab_id) throw new HttpError(403, 'TEAM_CHAT_ONLY', 'Images can only be sent in a lab team chat for now.');
+  await assertCanSendImage(userId);
+  if (caption) await assertClean(userId, [caption], { selfHarm: 'allow' });
+
+  const clean = await cleanImage(req.file.buffer);
+  const { public_id } = await uploadPrivateImage(clean.data, 'chat-images');
+
+  const now = new Date();
+  const [message] = await prisma.$transaction([
+    prisma.message.create({
+      data: {
+        conversation_id: id,
+        sender_id: userId,
+        body: caption,
+        created_at: now,
+        attachment: { create: { uploader_id: userId, public_id, width: clean.width, height: clean.height } },
+      },
+      include: { attachment: true },
+    }),
+    prisma.conversation.update({ where: { id }, data: { updated_at: now } }),
+    prisma.conversationMember.update({ where: { conversation_id_user_id: { conversation_id: id, user_id: userId } }, data: { last_read_at: now } }),
+  ]);
+
+  // Tell the people who can review it. Teammates hear nothing until it is approved.
+  const staff = await prisma.user.findMany({ where: { role: { in: ['moderator', 'admin'] }, id: { not: userId } }, select: { id: true } });
+  for (const s of staff) await createNotification(s.id, 'moderation', 'An image is waiting for review', { link: '/admin/attachments' });
+
+  res.status(201).json({
+    id: message.id,
+    body: message.body,
+    created_at: message.created_at,
+    from_me: true,
+    image: { id: message.attachment!.id, status: message.attachment!.status, width: clean.width, height: clean.height },
+  });
+};
+
+/** A signed link to one image, for the sender, staff, or a teammate once it is approved. */
+export const getImageLink = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const userId = req.userId!;
+  const a = await prisma.messageAttachment.findUnique({ where: { id }, include: { message: { select: { conversation_id: true, hidden: true, sender_id: true } } } });
+  if (!a) throw new HttpError(404, 'NOT_FOUND', 'Image not found');
+
+  const me = await prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
+  const isStaff = me?.role === 'moderator' || me?.role === 'admin';
+  const isSender = a.uploader_id === userId;
+  if (!isStaff) {
+    const member = await prisma.conversationMember.findUnique({ where: { conversation_id_user_id: { conversation_id: a.message.conversation_id, user_id: userId } } });
+    if (!member) throw new HttpError(404, 'NOT_FOUND', 'Image not found');
+    const blocked = await blockedEitherWay(userId);
+    if (!isSender && blocked.includes(a.uploader_id)) throw new HttpError(404, 'NOT_FOUND', 'Image not found');
+    if (!isSender && (a.status !== 'approved' || a.message.hidden)) throw new HttpError(403, 'NOT_APPROVED', 'This image is waiting for a moderator.');
+    if (isSender && a.status === 'rejected') throw new HttpError(403, 'REMOVED', 'This image was removed by a moderator.');
+  }
+  res.json({ url: signedImageUrl(a.public_id) });
 };
