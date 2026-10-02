@@ -57,29 +57,30 @@ model User {
   reset_code_expires_at DateTime?
   reset_attempts        Int       @default(0)
 
-  projects        Project[]
-  rsvps           EventRsvp[]
-  posts           Post[]
-  lab_memberships LabMember[]
-  lab_requests    LabJoinRequest[]
-  conversations   ConversationMember[]
-  messages_sent   Message[]
-  comments        Comment[]
-  reactions       Reaction[]
-  reports_made    Report[]             @relation("reporter")
-  blocks_made     Block[]              @relation("blocker")
-  blocked_by      Block[]              @relation("blocked")
-  lessons_done    LessonProgress[]
-  votes           Vote[]
-  points_log      PointsLog[]
-  notifications   Notification[]
-  sessions        Session[]
-  settings        UserSettings?
-  following       Follow[]             @relation("follower")
-  followers       Follow[]             @relation("following")
-  userBadges      UserBadge[]
-  petActions      PetAction[]
-  petMemories     PetMemory[]
+  projects          Project[]
+  rsvps             EventRsvp[]
+  posts             Post[]
+  lab_memberships   LabMember[]
+  lab_requests      LabJoinRequest[]
+  conversations     ConversationMember[]
+  messages_sent     Message[]
+  comments          Comment[]
+  reactions         Reaction[]
+  reports_made      Report[]             @relation("reporter")
+  blocks_made       Block[]              @relation("blocker")
+  blocked_by        Block[]              @relation("blocked")
+  lessons_done      LessonProgress[]
+  votes             Vote[]
+  points_log        PointsLog[]
+  notifications     Notification[]
+  sessions          Session[]
+  settings          UserSettings?
+  following         Follow[]             @relation("follower")
+  followers         Follow[]             @relation("following")
+  userBadges        UserBadge[]
+  petActions        PetAction[]
+  petMemories       PetMemory[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -666,4 +667,19 @@ model PetMemory {
 
   @@index([user_id, created_at])
   @@map("pet_memories")
+}
+
+// One browser or installed app that agreed to get push notifications.
+model PushSubscription {
+  id         String   @id @default(uuid())
+  user_id    String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  user_agent String?
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
