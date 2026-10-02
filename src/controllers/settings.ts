@@ -3,6 +3,8 @@ import type { AuthRequest } from '../middleware/auth.js';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { verifyGoogleToken } from '../lib/google.js';
+import { describeDevice } from '../lib/device.js';
+import { hashToken } from '../lib/tokens.js';
 
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
   const { current_password, new_password } = req.body as {
@@ -32,13 +34,36 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
   res.json({ message: user.password_hash ? 'Password updated' : 'Password set' });
 };
 
+const currentSessionId = async (userId: string, refreshToken: unknown): Promise<string | null> => {
+  if (typeof refreshToken !== 'string' || refreshToken.length < 10) return null;
+  const h = hashToken(refreshToken);
+  const s = await prisma.session.findFirst({ where: { user_id: userId, OR: [{ token_hash: h }, { prev_token_hash: h }] }, select: { id: true } });
+  return s?.id ?? null;
+};
+
 export const getSessions = async (req: AuthRequest, res: Response): Promise<void> => {
   const sessions = await prisma.session.findMany({
     where: { user_id: req.userId },
     select: { id: true, device_info: true, ip: true, last_active: true, created_at: true },
     orderBy: { last_active: 'desc' },
   });
-  res.json(sessions);
+  res.json(sessions.map(({ device_info, ...s }) => ({ ...s, device_info, device: describeDevice(device_info) })));
+};
+
+/** Which of the member's sessions is the one making this request, found from their own refresh token. */
+export const whichSession = async (req: AuthRequest, res: Response): Promise<void> => {
+  res.json({ id: await currentSessionId(req.userId!, (req.body as { refresh_token?: string }).refresh_token) });
+};
+
+/** Signs out every device except the one making the request. */
+export const revokeOtherSessions = async (req: AuthRequest, res: Response): Promise<void> => {
+  const keep = await currentSessionId(req.userId!, (req.body as { refresh_token?: string }).refresh_token);
+  if (!keep) {
+    res.status(400).json({ error: "Couldn't tell which device this is. Sign in again and retry.", code: 'UNKNOWN_SESSION' });
+    return;
+  }
+  const { count } = await prisma.session.deleteMany({ where: { user_id: req.userId, id: { not: keep } } });
+  res.json({ message: 'Signed out other devices', count });
 };
 
 export const revokeSession = async (req: AuthRequest, res: Response): Promise<void> => {

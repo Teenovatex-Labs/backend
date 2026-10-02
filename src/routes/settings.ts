@@ -2,6 +2,8 @@ import { Router } from 'express';
 import {
   changePassword,
   getSessions,
+  whichSession,
+  revokeOtherSessions,
   revokeSession,
   updateNotifications,
   deleteAccount,
@@ -16,6 +18,8 @@ const router = Router();
 router.use(requireAuth);
 router.patch('/password', authLimiter, validate(changePasswordSchema), changePassword);
 router.get('/sessions', getSessions);
+router.post('/sessions/current', whichSession);
+router.post('/sessions/revoke-others', revokeOtherSessions);
 router.delete('/sessions/:id', revokeSession);
 router.patch('/notifications', validate(updateNotificationsSchema), updateNotifications);
 router.delete('/account', authLimiter, validate(deleteAccountSchema), deleteAccount);
