@@ -59,6 +59,10 @@ export const createReport = async (req: AuthRequest, res: Response): Promise<voi
   const existing = await prisma.report.findUnique({
     where: { reporter_id_target_type_target_id: { reporter_id, target_type, target_id: stored_target_id } },
   });
+  if (target_type === 'message') {
+    // A reported image goes back to the moderators and is hidden from the team until they look.
+    await prisma.messageAttachment.updateMany({ where: { message_id: target_id, status: 'approved' }, data: { status: 'pending', reviewed_by: null, reviewed_at: null } });
+  }
   if (!existing) {
     await prisma.report.create({
       data: { reporter_id, target_type, target_id: stored_target_id, target_user_id: target.user_id, reason, details: details ?? null },

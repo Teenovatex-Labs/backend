@@ -5,6 +5,7 @@ import { prisma } from '../db.js';
 import { verifyGoogleToken } from '../lib/google.js';
 import { describeDevice } from '../lib/device.js';
 import { describeLocation } from '../lib/geo.js';
+import { deletePrivateImage } from '../middleware/upload.js';
 import { hashToken } from '../lib/tokens.js';
 
 export const changePassword = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -137,6 +138,8 @@ export const deleteAccount = async (req: AuthRequest, res: Response): Promise<vo
     }
   }
 
+  const files = await prisma.messageAttachment.findMany({ where: { uploader_id: req.userId, escalated: false }, select: { public_id: true } });
+  await Promise.all(files.map((f) => deletePrivateImage(f.public_id)));
   await prisma.user.delete({ where: { id: req.userId } });
   res.json({ message: 'Account deleted' });
 };
