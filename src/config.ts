@@ -42,6 +42,7 @@ const buildSchema = (isProduction: boolean) => {
       CLOUDINARY_API_SECRET: z.string().optional(),
       // Alfred's brain: free-tier providers tried in order, each with any number of keys
       // (comma-separated) so a spare key takes over when one is rate-limited.
+      SENTRY_DSN: z.string().url().optional(),
       GEMINI_API_KEYS: z.string().optional(),
       // Web push. Without both keys, push is simply off.
       VAPID_PUBLIC_KEY: z.string().optional(),
@@ -92,6 +93,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
       gemini: { keys: splitKeys(c.GEMINI_API_KEYS), model: c.GEMINI_MODEL },
       groq: { keys: splitKeys(c.GROQ_API_KEYS), model: c.GROQ_MODEL },
     },
+    sentryDsn: c.SENTRY_DSN,
     push: { publicKey: c.VAPID_PUBLIC_KEY, privateKey: c.VAPID_PRIVATE_KEY, subject: c.VAPID_SUBJECT },
     cloudinary: {
       cloudName: c.CLOUDINARY_CLOUD_NAME,
