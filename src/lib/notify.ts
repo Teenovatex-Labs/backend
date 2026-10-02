@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../db.js';
 import { publish } from './realtime.js';
+import { sendPush } from './push.js';
 
 type NotifyOptions = { link?: string; payload?: Prisma.InputJsonValue };
 
@@ -31,5 +32,6 @@ export const createNotification = async (
     },
   });
   publish(userId, { type: 'notification' });
+  void sendPush(userId, { title: 'TeenovateX', body: message, url: options.link ?? '/notifications', tag: created.id });
   return created;
 };
