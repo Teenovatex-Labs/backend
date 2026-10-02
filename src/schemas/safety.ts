@@ -33,3 +33,12 @@ export const lessonSchema = z.object({
   minutes: z.number().int().min(1).max(120).optional(),
 });
 export const lessonUpdateSchema = lessonSchema.partial().extend({ position: z.number().int().min(0).max(1000).optional() });
+
+export const reviewAttachmentSchema = z.object({
+  action: z.enum(['approve', 'reject']),
+  note: z.string().max(500).optional(),
+  // A serious safety matter: keep the file privately as evidence instead of deleting it.
+  escalate: z.boolean().optional(),
+  // Also pause the sender's account.
+  suspend_days: z.number().int().min(1).max(365).optional(),
+});

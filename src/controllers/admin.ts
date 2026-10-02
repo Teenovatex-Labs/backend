@@ -5,6 +5,8 @@ import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { createNotification } from '../lib/notify.js';
+import { publish } from '../lib/realtime.js';
+import { deletePrivateImage, signedImageUrl } from '../middleware/upload.js';
 
 const DAY = 24 * 60 * 60 * 1000;
 const PAGE = 20;
@@ -249,4 +251,69 @@ export const listAudit = async (req: AuthRequest, res: Response): Promise<void> 
   const actors = await prisma.user.findMany({ where: { id: { in: rows.map((r) => r.actor_id).filter((x): x is string => !!x) } }, select: { id: true, username: true } });
   const names = new Map(actors.map((a) => [a.id, a.username]));
   res.json({ items: rows.map((r) => ({ ...r, actor: r.actor_id ? names.get(r.actor_id) ?? null : null })), total, page, pages: Math.ceil(total / PAGE) });
+};
+
+// --- image review -----------------------------------------------------------------------------------
+
+export const listAttachments = async (req: AuthRequest, res: Response): Promise<void> => {
+  const status = ['pending', 'approved', 'rejected'].includes(String(req.query.status)) ? (String(req.query.status) as 'pending' | 'approved' | 'rejected') : 'pending';
+  const rows = await prisma.messageAttachment.findMany({
+    where: { status },
+    orderBy: { created_at: status === 'pending' ? 'asc' : 'desc' },
+    take: 50,
+    include: {
+      uploader: { select: { id: true, username: true, avatar_url: true, created_at: true } },
+      message: { select: { body: true, conversation: { select: { lab: { select: { name: true, slug: true } } } } } },
+    },
+  });
+  res.json({
+    attachments: rows.map((a) => ({
+      id: a.id,
+      status: a.status,
+      url: signedImageUrl(a.public_id),
+      width: a.width,
+      height: a.height,
+      caption: a.message.body,
+      lab: a.message.conversation.lab,
+      sender: a.uploader,
+      escalated: a.escalated,
+      created_at: a.created_at,
+    })),
+  });
+};
+
+export const reviewAttachment = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params as { id: string };
+  const { action, note, escalate, suspend_days } = req.body as { action: 'approve' | 'reject'; note?: string; escalate?: boolean; suspend_days?: number };
+  const me = await actor(req);
+  const a = await prisma.messageAttachment.findUnique({ where: { id }, include: { message: { select: { id: true, conversation_id: true } } } });
+  if (!a) throw new HttpError(404, 'NOT_FOUND', 'Image not found');
+  if (a.uploader_id === me.id) throw new HttpError(403, 'FORBIDDEN', "You can't review your own image");
+
+  if (action === 'approve') {
+    await prisma.$transaction([
+      prisma.messageAttachment.update({ where: { id }, data: { status: 'approved', reviewed_by: me.id, reviewed_at: new Date(), note: note ?? null } }),
+      prisma.message.update({ where: { id: a.message.id }, data: { hidden: false } }),
+    ]);
+    await audit(me.id, 'attachment.approve', { type: 'attachment', id });
+    // Now the team can see it: tell them.
+    const members = await prisma.conversationMember.findMany({ where: { conversation_id: a.message.conversation_id, user_id: { not: a.uploader_id } }, select: { user_id: true } });
+    for (const m of members) publish(m.user_id, { type: 'message', conversation_id: a.message.conversation_id });
+    res.json({ message: 'Approved' });
+    return;
+  }
+
+  if (suspend_days) await assertCanActOn(me, a.uploader_id);
+  await prisma.$transaction([
+    prisma.messageAttachment.update({ where: { id }, data: { status: 'rejected', reviewed_by: me.id, reviewed_at: new Date(), escalated: !!escalate, note: note ?? null } }),
+    prisma.message.update({ where: { id: a.message.id }, data: { hidden: true } }),
+    ...(suspend_days
+      ? [prisma.user.update({ where: { id: a.uploader_id }, data: { suspended_until: new Date(Date.now() + suspend_days * DAY), suspended_reason: note ?? 'An image broke the community guidelines' } })]
+      : []),
+  ]);
+  // Evidence of a serious matter stays (privately). Anything else is deleted for good.
+  if (!escalate) await deletePrivateImage(a.public_id);
+  await audit(me.id, escalate ? 'attachment.reject_escalated' : 'attachment.reject', { type: 'attachment', id }, { suspend_days: suspend_days ?? null });
+  await createNotification(a.uploader_id, 'system', 'A moderator removed an image you sent. Please keep chats friendly and safe.', {});
+  res.json({ message: 'Rejected' });
 };
