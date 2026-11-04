@@ -1,0 +1,330 @@
+// Admissions and membership. An accepted applicant is NOT a user until they register with an
+// invitation. Application data is private to authorised admins and never copied to a public profile.
+
+enum WindowStatus {
+  scheduled
+  open
+  closed
+  published
+}
+
+enum ApplicationStatus {
+  draft
+  submitted
+  under_review
+  shortlisted
+  waitlisted
+  accepted
+  declined
+  withdrawn
+}
+
+enum MembershipStatus {
+  onboarding
+  active
+  on_leave
+  inactive
+  alumni
+  removed
+}
+
+enum QuestionSource {
+  fixed
+  ai
+  fallback
+}
+
+enum ReviewKind {
+  first
+  second
+}
+
+enum ReviewRecommendation {
+  accept
+  decline
+  waitlist
+  shortlist
+}
+
+enum ClarificationStatus {
+  open
+  answered
+  expired
+}
+
+enum ConsentStatus {
+  pending
+  confirmed
+  withdrawn
+  expired
+}
+
+enum InviteRole {
+  member
+  tutor
+  partner
+}
+
+enum InviteSource {
+  application
+  admin
+}
+
+// One monthly intake. All times are absolute (UTC); the interface shows them in the viewer's zone.
+model ApplicationWindow {
+  id                   String       @id @default(uuid())
+  opens_at             DateTime
+  closes_at            DateTime
+  decisions_publish_at DateTime
+  // An internal goal only; capacity is flexible.
+  target_size          Int?
+  status               WindowStatus @default(scheduled)
+  form_version         String
+  note                 String?
+  created_by           String?
+  created_at           DateTime     @default(now())
+  updated_at           DateTime     @updatedAt
+
+  applications Application[]
+  reminders    ApplicationReminder[]
+
+  @@index([opens_at])
+  @@map("application_windows")
+}
+
+model Application {
+  id                String            @id @default(uuid())
+  // Shown to the applicant, for example TX-2026-00024.
+  reference         String            @unique
+  window_id         String
+  status            ApplicationStatus @default(draft)
+
+  email             String
+  email_verified_at DateTime?
+  full_name         String
+  birth_date        DateTime          @db.Date
+  country           String
+  city              String
+  whatsapp          String
+  school            String?
+  education_level   String
+  interests         String[]
+  skill_level       String?
+  skill_level_note  String?
+  current_skills    String[]
+  learning_goals    String[]
+  portfolio_url     String?
+  github_url        String?
+  linkedin_url      String?
+
+  // Resume link for drafts: stored as a hash, expires.
+  resume_token_hash String?           @unique
+  resume_expires_at DateTime?
+
+  submitted_at      DateTime?
+  // Set when an admin claims it; from then on the applicant can no longer edit freely.
+  claimed_by        String?
+  claimed_at        DateTime?
+  locked_at         DateTime?
+  second_reviewer_id String?
+  decided_by        String?
+  decided_at        DateTime?
+  // Results stay private until the window's decision date.
+  published_at      DateTime?
+  decision_note     String?
+  decline_feedback  String?
+  withdrawn_at      DateTime?
+  // AI summary for reviewers. Advisory only.
+  ai_summary        Json?
+  ip_hash           String?
+  // Declined data is deleted after this date (6 months; a reapplication resets it).
+  retention_delete_at DateTime?
+  created_at        DateTime          @default(now())
+  updated_at        DateTime          @updatedAt
+
+  window         ApplicationWindow       @relation(fields: [window_id], references: [id])
+  answers        ApplicationAnswer[]
+  attachments    ApplicationAttachment[]
+  reviews        ApplicationReview[]
+  clarifications ApplicationClarification[]
+  consent        GuardianConsent?
+  invitations    Invitation[]
+
+  @@unique([email, window_id])
+  @@index([window_id, status])
+  @@index([claimed_by])
+  @@index([retention_delete_at])
+  @@map("applications")
+}
+
+// Every question Alfred (or the fixed bank) asked, exactly as shown, with the answer.
+model ApplicationAnswer {
+  id             String         @id @default(uuid())
+  application_id String
+  position       Int
+  question_key   String
+  question_text  String
+  source         QuestionSource
+  // Which prompt/model version produced an AI question, so scores stay explainable.
+  prompt_version String?
+  format         String
+  // The rubric criterion this question gathers evidence for.
+  criterion      String?
+  answer         Json?
+  revision       Int            @default(1)
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @updatedAt
+
+  application Application                @relation(fields: [application_id], references: [id], onDelete: Cascade)
+  revisions   ApplicationAnswerRevision[]
+
+  @@unique([application_id, position])
+  @@map("application_answers")
+}
+
+model ApplicationAnswerRevision {
+  id         String   @id @default(uuid())
+  answer_id  String
+  answer     Json?
+  created_at DateTime @default(now())
+
+  answer_row ApplicationAnswer @relation(fields: [answer_id], references: [id], onDelete: Cascade)
+
+  @@index([answer_id])
+  @@map("application_answer_revisions")
+}
+
+// Links, images and PDFs only in v1. Files are stored privately and scanned before admins see them.
+model ApplicationAttachment {
+  id             String   @id @default(uuid())
+  application_id String
+  kind           String
+  url            String?
+  public_id      String?
+  filename       String?
+  mime_type      String?
+  size_bytes     Int?
+  scan_status    String   @default("pending")
+  created_at     DateTime @default(now())
+
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@index([application_id])
+  @@map("application_attachments")
+}
+
+model ApplicationReview {
+  id             String               @id @default(uuid())
+  application_id String
+  reviewer_id    String
+  kind           ReviewKind           @default(first)
+  // Keys are the six rubric criteria, values 1 to 5.
+  scores         Json?
+  weighted_score Float?
+  recommendation ReviewRecommendation?
+  note           String?
+  // Shown to the reviewer only after they have saved their own scores.
+  ai_suggestion  Json?
+  submitted_at   DateTime?
+  created_at     DateTime             @default(now())
+
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@unique([application_id, reviewer_id])
+  @@map("application_reviews")
+}
+
+model ApplicationClarification {
+  id             String              @id @default(uuid())
+  application_id String
+  asked_by       String
+  question       String
+  due_at         DateTime
+  response       String?
+  responded_at   DateTime?
+  status         ClarificationStatus @default(open)
+  created_at     DateTime            @default(now())
+
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@index([application_id, status])
+  @@map("application_clarifications")
+}
+
+// Guardian confirmation (ages 13 to 15; the threshold is a setting). Requested after acceptance.
+model GuardianConsent {
+  id             String        @id @default(uuid())
+  application_id String        @unique
+  parent_email   String
+  token_hash     String        @unique
+  text_version   String
+  status         ConsentStatus @default(pending)
+  requested_at   DateTime      @default(now())
+  expires_at     DateTime
+  confirmed_at   DateTime?
+  withdrawn_at   DateTime?
+  ip_hash        String?
+
+  application Application @relation(fields: [application_id], references: [id], onDelete: Cascade)
+
+  @@map("guardian_consents")
+}
+
+// One single-use, email-bound, expiring invitation model for applicants (and, later, admin invites).
+model Invitation {
+  id             String       @id @default(uuid())
+  token_hash     String       @unique
+  email          String
+  role           InviteRole   @default(member)
+  source         InviteSource
+  application_id String?
+  expires_at     DateTime
+  used_at        DateTime?
+  used_by        String?
+  revoked_at     DateTime?
+  created_by     String?
+  created_at     DateTime     @default(now())
+
+  application Application? @relation(fields: [application_id], references: [id])
+
+  @@index([email])
+  @@map("invitations")
+}
+
+model OnboardingProgress {
+  user_id      String
+  step         String
+  completed_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, step])
+  @@map("onboarding_progress")
+}
+
+model MembershipEvent {
+  id          String            @id @default(uuid())
+  user_id     String
+  from_status MembershipStatus?
+  to_status   MembershipStatus
+  reason      String?
+  actor_id    String?
+  created_at  DateTime          @default(now())
+
+  @@index([user_id, created_at])
+  @@map("membership_events")
+}
+
+// "Tell me when applications open" requests while the window is closed.
+model ApplicationReminder {
+  id         String    @id @default(uuid())
+  email      String
+  window_id  String?
+  created_at DateTime  @default(now())
+  sent_at    DateTime?
+
+  window ApplicationWindow? @relation(fields: [window_id], references: [id])
+
+  @@unique([email, window_id])
+  @@map("application_reminders")
+}
