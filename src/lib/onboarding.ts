@@ -1,14 +1,14 @@
 import { config } from '../config.js';
 
 /**
- * What a new member does in their first week. `confirmed` steps are the member's own word, so they
- * are a nudge, not proof. The HCB step is optional: supporting the programme should never gate a teenager.
+ * What a new member does in their first week. `confirm` steps are the member's own word, so they
+ * are a nudge, not proof. Joining the Hack Club Dashboard (HCB) is a required step, per the admissions spec.
  */
 export const STEPS = [
   { key: 'conduct', title: 'Read and accept the code of conduct', required: true, kind: 'confirm' },
   { key: 'whatsapp', title: 'Join the community WhatsApp group', required: true, kind: 'confirm' },
   { key: 'profile', title: 'Add a short bio to your profile', required: true, kind: 'derived' },
-  { key: 'hcb', title: 'See how donations keep TeenovateX running', required: false, kind: 'confirm' },
+  { key: 'hcb', title: 'Join the Hack Club Dashboard (HCB) with the invite link', required: true, kind: 'confirm' },
 ] as const;
 
 export type StepKey = (typeof STEPS)[number]['key'];

@@ -30,6 +30,7 @@ describe('onboarding', () => {
   it('activates the member once every required step is done, and not before', async () => {
     const { auth, user } = await newcomer();
     await confirm(auth, 'conduct');
+    await confirm(auth, 'hcb');
     expect((await confirm(auth, 'whatsapp')).body.status).toBe('onboarding');
     await prisma.user.update({ where: { id: user.id }, data: { bio: 'I like building small web apps.' } });
     const done = await get(auth);
@@ -38,10 +39,11 @@ describe('onboarding', () => {
     expect(await prisma.membershipEvent.count({ where: { user_id: user.id, to_status: 'active' } })).toBe(1);
   });
 
-  it('does not let the optional HCB step block activation', async () => {
+  it('keeps a member in onboarding until they confirm joining HCB', async () => {
     const { auth } = await makeUser({ membership_status: 'onboarding', bio: 'Long enough bio text' });
     await confirm(auth, 'conduct');
-    expect((await confirm(auth, 'whatsapp')).body.status).toBe('active');
+    expect((await confirm(auth, 'whatsapp')).body.status).toBe('onboarding');
+    expect((await confirm(auth, 'hcb')).body.status).toBe('active');
   });
 
   it('rejects unknown steps and steps from members not in onboarding', async () => {
