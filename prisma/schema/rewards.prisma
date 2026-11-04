@@ -26,7 +26,6 @@ model PointsLog {
   season Season? @relation(fields: [season_id], references: [id])
 
   @@index([season_id])
-
   @@map("points_log")
 }
 
@@ -128,12 +127,12 @@ model BadgeAward {
 
 // Points are counted per season. Season 0 holds everything earned before seasons existed (legacy).
 model Season {
-  id        String    @id @default(uuid())
-  number    Int       @unique
-  name      String
-  starts_at DateTime  @default(now())
-  ends_at   DateTime?
-  is_current Boolean  @default(false)
+  id         String    @id @default(uuid())
+  number     Int       @unique
+  name       String
+  starts_at  DateTime  @default(now())
+  ends_at    DateTime?
+  is_current Boolean   @default(false)
   created_by String?
 
   totals SeasonTotal[]

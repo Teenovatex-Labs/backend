@@ -77,15 +77,23 @@ model User {
 
   // Membership (separate from the admissions status of an application). Everyone who joined
   // before admissions existed is active and marked existing_member (grandfathered).
-  membership_status   MembershipStatus @default(active)
+  membership_status   MembershipStatus     @default(active)
   status_changed_at   DateTime?
-  existing_member     Boolean          @default(false)
+  existing_member     Boolean              @default(false)
   // Accepted members have 7 days to finish onboarding; an admin can move this date.
   onboarding_due_at   DateTime?
   onboarding_progress OnboardingProgress[]
   badge_awards        BadgeAward[]
   challenge_entries   ChallengeEntry[]
-  season_totals       SeasonTotal[]
+  pairings            PairingMember[]
+
+  // Optional topics a member picks for themselves; admins use them to suggest pairings.
+  interests               String[]      @default([])
+  skills                  String[]      @default([])
+  // Set by an admin after vetting an adult, and required before that adult can be paired with a minor.
+  safeguarding_cleared_at DateTime?
+  safeguarding_cleared_by String?
+  season_totals           SeasonTotal[]
 
   @@map("users")
 }
