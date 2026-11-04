@@ -37,8 +37,11 @@ async function post(fetchImpl: FetchLike, url: string, headers: Record<string, s
 }
 
 type Prompt = { system: string; user: string };
+/** Callers that need longer or cooler output than Alfred's short chat replies can say so. */
+export type GenerateOptions = { maxTokens?: number; temperature?: number };
+const DEFAULTS = { maxTokens: 320, temperature: 0.4 };
 
-async function askGemini(fetchImpl: FetchLike, key: string, model: string, p: Prompt): Promise<Response> {
+async function askGemini(fetchImpl: FetchLike, key: string, model: string, p: Prompt, o: Required<GenerateOptions>): Promise<Response> {
   return post(
     fetchImpl,
     `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
@@ -46,12 +49,12 @@ async function askGemini(fetchImpl: FetchLike, key: string, model: string, p: Pr
     {
       systemInstruction: { parts: [{ text: p.system }] },
       contents: [{ role: 'user', parts: [{ text: p.user }] }],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 320, responseMimeType: 'application/json' },
+      generationConfig: { temperature: o.temperature, maxOutputTokens: o.maxTokens, responseMimeType: 'application/json' },
     }
   );
 }
 
-async function askGroq(fetchImpl: FetchLike, key: string, model: string, p: Prompt): Promise<Response> {
+async function askGroq(fetchImpl: FetchLike, key: string, model: string, p: Prompt, o: Required<GenerateOptions>): Promise<Response> {
   return post(
     fetchImpl,
     'https://api.groq.com/openai/v1/chat/completions',
@@ -62,8 +65,8 @@ async function askGroq(fetchImpl: FetchLike, key: string, model: string, p: Prom
         { role: 'system', content: p.system },
         { role: 'user', content: p.user },
       ],
-      temperature: 0.4,
-      max_tokens: 320,
+      temperature: o.temperature,
+      max_tokens: o.maxTokens,
       response_format: { type: 'json_object' },
     }
   );
@@ -84,8 +87,9 @@ const extract = (provider: ProviderName, data: unknown): string | null => {
  * text. `accept` lets the caller reject an unusable answer (bad JSON), in which case the next key
  * or provider is tried instead.
  */
-export async function generate(prompt: Prompt, accept: (text: string) => boolean, fetchImpl: FetchLike = fetch): Promise<Generated> {
+export async function generate(prompt: Prompt, accept: (text: string) => boolean, fetchImpl: FetchLike = fetch, options: GenerateOptions = {}): Promise<Generated> {
   const { pet } = config;
+  const o = { ...DEFAULTS, ...options };
   let attempts = 0;
 
   for (const provider of pet.order) {
@@ -95,7 +99,7 @@ export async function generate(prompt: Prompt, accept: (text: string) => boolean
       if (isCoolingDown(id)) continue;
       attempts++;
       try {
-        const res = provider === 'gemini' ? await askGemini(fetchImpl, key, model, prompt) : await askGroq(fetchImpl, key, model, prompt);
+        const res = provider === 'gemini' ? await askGemini(fetchImpl, key, model, prompt, o) : await askGroq(fetchImpl, key, model, prompt, o);
         if (res.status === 429) { cool(id, retryAfterMs(res)); continue; }
         if (res.status === 401 || res.status === 403) { cool(id, 60 * 60_000); continue; } // a bad or revoked key
         if (res.status >= 500) { cool(id, 20_000); continue; }

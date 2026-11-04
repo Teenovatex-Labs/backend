@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
+import { answerQuestion, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
 import { confirmConsent, requestGuardian, showConsent, withdrawConsent } from '../controllers/guardian.js';
 import { requireApplicant } from '../middleware/applicant.js';
 import { authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import { clarificationReplySchema, guardianSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
+import { answerSchema, clarificationReplySchema, guardianSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
 
 const router = Router();
 
@@ -16,6 +16,9 @@ router.post('/start', otpRequestLimiter, validate(startApplicationSchema), start
 router.post('/lookup', otpRequestLimiter, validate(lookupSchema), lookupStatus);
 
 router.get('/me', authLimiter, requireApplicant, getMyApplication);
+router.get('/interview', requireApplicant, getInterview);
+router.post('/interview/next', authLimiter, requireApplicant, nextQuestion);
+router.put('/interview/answers/:position', requireApplicant, validate(answerSchema), answerQuestion);
 router.patch('/draft', requireApplicant, validate(updateDraftSchema), updateDraft);
 router.post('/submit', requireApplicant, submitApplication);
 router.post('/withdraw', requireApplicant, withdrawApplication);

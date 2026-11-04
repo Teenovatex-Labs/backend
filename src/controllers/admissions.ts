@@ -13,6 +13,7 @@ import {
   windowState,
 } from '../lib/admissions.js';
 import { sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
+import { ANSWER_MAX, ensureNextQuestion, interviewState, saveAnswer } from '../lib/alfred/interview.js';
 import { needsGuardian } from '../lib/guardian.js';
 import { createNotification } from '../lib/notify.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
@@ -187,6 +188,7 @@ export const submitApplication = async (req: ApplicantRequest, res: Response): P
   // Closing is strict: the clock on our server decides, never the applicant's browser.
   if (windowState(window) !== 'open') throw new HttpError(409, 'APPLICATIONS_CLOSED', 'Applications are closed. Your draft is saved for the next window.');
   if (app.interests.length === 0) throw new HttpError(422, 'INCOMPLETE', 'Pick at least one interest before submitting.');
+  if (!(await interviewState(app)).can_submit) throw new HttpError(422, 'INTERVIEW_INCOMPLETE', 'Finish the questions with Alfred before submitting.');
 
   const updated = await prisma.application.update({ where: { id: app.id }, data: { status: 'submitted', submitted_at: new Date() } });
   try {
@@ -218,4 +220,29 @@ export const replyToClarification = async (req: ApplicantRequest, res: Response)
   const { response } = req.body as { response: string };
   await prisma.applicationClarification.update({ where: { id: c.id }, data: { response, responded_at: new Date(), status: 'answered' } });
   res.json({ message: 'Thanks, your reply was sent to the reviewer.' });
+};
+
+/** Where the applicant is in Alfred's questions. Never generates anything. */
+export const getInterview = async (req: ApplicantRequest, res: Response): Promise<void> => {
+  res.json(await interviewState(req.application!));
+};
+
+/** Asks Alfred for the next question, once the last one is answered. Returns the open one if there is one. */
+export const nextQuestion = async (req: ApplicantRequest, res: Response): Promise<void> => {
+  const app = await carryForward(req.application!);
+  if (!(app.status === 'draft' || (app.status === 'submitted' && !app.locked_at))) throw new HttpError(409, 'APPLICATION_LOCKED', 'This application is being reviewed and can no longer be edited.');
+  const q = await ensureNextQuestion(app);
+  const state = await interviewState(app);
+  res.json({ ...state, next: q ? { position: q.position, question: q.question_text, format: q.format } : null });
+};
+
+export const answerQuestion = async (req: ApplicantRequest, res: Response): Promise<void> => {
+  const app = await carryForward(req.application!);
+  if (!(app.status === 'draft' || (app.status === 'submitted' && !app.locked_at))) throw new HttpError(409, 'APPLICATION_LOCKED', 'This application is being reviewed and can no longer be edited.');
+  const position = Number(req.params.position);
+  const { answer } = req.body as { answer: string };
+  if (answer.length > ANSWER_MAX) throw new HttpError(422, 'TOO_LONG', `Keep each answer under ${ANSWER_MAX} characters.`);
+  const result = await saveAnswer(app, position, answer);
+  if (!result) throw new HttpError(404, 'NOT_FOUND', 'There is no such question.');
+  res.json({ saved: true, safety_message: result.safety, ...(await interviewState(app)) });
 };
