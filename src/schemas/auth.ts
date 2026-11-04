@@ -26,6 +26,7 @@ export const registerSchema = z.object({
   password: strongPassword,
   birth_date: birthDateField,
   timezone: timezoneField.optional(),
+  invite_token: z.string().min(20).max(200).optional(),
 });
 
 export const loginSchema = z.object({
@@ -35,7 +36,7 @@ export const loginSchema = z.object({
 
 export const refreshSchema = z.object({ refresh_token: z.string() });
 
-export const googleAuthSchema = z.object({ id_token: z.string() });
+export const googleAuthSchema = z.object({ id_token: z.string(), invite_token: z.string().min(20).max(200).optional() });
 
 export const verifyEmailSchema = z.object({
   email: z.string().email(),
