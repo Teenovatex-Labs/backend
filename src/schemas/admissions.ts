@@ -53,7 +53,8 @@ export const createCohortSchema = z.object({
 export const updateCohortSchema = createCohortSchema.partial().refine((v) => Object.keys(v).length > 0, 'Nothing to update');
 
 
-const rating = z.number().int().min(1).max(5);
+// null means "insufficient evidence": left out of the weighted score rather than counted as a 1.
+const rating = z.number().int().min(1).max(5).nullable();
 export const reviewSchema = z.object({
   scores: z.object(Object.fromEntries(CRITERIA.map((c) => [c, rating])) as Record<(typeof CRITERIA)[number], typeof rating>),
   recommendation: z.enum(['accept', 'decline', 'waitlist', 'shortlist']),

@@ -71,6 +71,19 @@ describe('review flow', () => {
     expect(ok.body.weighted_score).toBe(3.5);
   });
 
+  it('lets a reviewer mark a criterion as insufficient evidence without counting it as a low score', async () => {
+    const { make, a1 } = await setup();
+    const a = await make(1);
+    await request(app).post(api(`/${a.id}/claim`)).set(a1.auth);
+    const res = await request(app).post(api(`/${a.id}/review`)).set(a1.auth).send({ scores: { ...scores, motivation_commitment: null }, recommendation: 'shortlist' });
+    expect(res.status).toBe(200);
+    // (100 + 100 + 60 + 30 + 50) / 90
+    expect(res.body.weighted_score).toBe(3.78);
+    const detail = await request(app).get(api(`/${a.id}`)).set(a1.auth);
+    expect(detail.body.rubric.ratings).toHaveLength(5);
+    expect(detail.body.rubric.criteria.initiative_action.title).toBe('Initiative & Action');
+  });
+
   it('makes the second review blind and waits for it before deciding', async () => {
     const { make, a1, a2 } = await setup();
     const a = await make(1);
