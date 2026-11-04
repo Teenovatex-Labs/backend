@@ -59,6 +59,7 @@ const buildSchema = (isProduction: boolean) => {
       // Serious safety alerts go only to them. Unset, they fall back to admins and a warning is logged.
       SAFEGUARDING_LEAD_EMAILS: z.string().optional(),
       ADMISSIONS_AI_ENABLED: z.string().default('true'),
+      ADMISSIONS_SUMMARY_ENABLED: z.string().default('false'),
       PET_AI_ENABLED: z.string().default('true'),
       // Comma-separated emails that become admin automatically once they have verified the address.
       ADMIN_EMAILS: z.string().optional(),
@@ -105,6 +106,8 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     onboarding: { whatsappUrl: c.ONBOARDING_WHATSAPP_URL, hcbUrl: c.ONBOARDING_HCB_URL },
     safeguardingEmails: splitKeys(c.SAFEGUARDING_LEAD_EMAILS).map((e) => e.toLowerCase()),
     admissionsAiEnabled: c.ADMISSIONS_AI_ENABLED !== 'false',
+    // Reviewer summaries are off until someone turns them on deliberately.
+    admissionsSummaryEnabled: c.ADMISSIONS_SUMMARY_ENABLED === 'true',
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
       dailyLimit: c.PET_DAILY_LIMIT,
