@@ -5,6 +5,8 @@ import { audit } from '../audit.js';
 import { createNotification } from '../notify.js';
 import { send } from '../resend.js';
 import { generate, hasProviders } from '../pet/providers.js';
+import { ageOn } from '../age.js';
+import { CRITERIA } from '../rubric.js';
 import { FOCUS, TOTAL_QUESTIONS, criterionFor, pickFallback } from './questions.js';
 import { PROMPT_VERSION, SYSTEM, userPrompt } from './persona.js';
 import { SAFETY_REPLY, isSensitive } from './safety.js';
@@ -27,7 +29,7 @@ export const acceptQuestion = (raw: string): string | null => {
     const q = (JSON.parse(raw) as { question?: unknown }).question;
     if (typeof q !== 'string') return null;
     const t = q.trim();
-    if (t.length < 15 || t.length > 260 || !t.includes('?')) return null;
+    if (t.length < 15 || t.length > 340 || !t.includes('?')) return null;
     if (/https?:|www\.|@|\d{7,}/i.test(t)) return null;
     return t;
   } catch {
@@ -49,20 +51,22 @@ export const ensureNextQuestion = async (app: Application): Promise<ApplicationA
   const position = answers.length + 1;
   const criterion = criterionFor(position);
   const used = answers.map((a) => a.question_key);
+  const age = ageOn(app.birth_date);
+  const covered = CRITERIA.filter((c) => answers.some((a) => a.criterion === c && textOf(a) !== ''));
   let question: { key: string; text: string; source: 'ai' | 'fallback' } | null = null;
 
   if (aiAllowed(answers)) {
     try {
       const history = answers.map((a) => ({ question: a.question_text, answer: textOf(a) }));
       let accepted: string | null = null;
-      await generate({ system: SYSTEM, user: userPrompt(FOCUS[criterion], history, app.interests) }, (t) => (accepted = acceptQuestion(t)) !== null, fetch, { maxTokens: 200, temperature: 0.7 });
+      await generate({ system: SYSTEM, user: userPrompt(FOCUS[criterion], history, app.interests, covered.map((c) => FOCUS[c].split(':')[0]!), { age, skill_level: app.skill_level }) }, (t) => (accepted = acceptQuestion(t)) !== null, fetch, { maxTokens: 260, temperature: 0.7 });
       if (accepted) question = { key: `ai-${position}`, text: accepted, source: 'ai' };
     } catch {
       // Every provider failed or answered badly: the fixed bank takes over.
     }
   }
   if (!question) {
-    const f = pickFallback(criterion, used);
+    const f = pickFallback(criterion, used, { age, interests: app.interests });
     if (!f) return null;
     question = { key: f.key, text: f.text, source: 'fallback' };
   }

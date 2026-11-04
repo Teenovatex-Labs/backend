@@ -5,7 +5,7 @@ import { HttpError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { ageOn } from '../lib/age.js';
 import { can } from '../lib/permissions.js';
-import { CRITERIA, weightedScore, type Criterion } from '../lib/rubric.js';
+import { CRITERIA, CRITERION_GUIDE, INSUFFICIENT_EVIDENCE, RATING_GUIDE, RUBRIC, weightedScore, type Criterion, type Rating } from '../lib/rubric.js';
 import { RETENTION_MS } from '../lib/admissions.js';
 import { sendClarificationRequest } from '../lib/admissionsEmail.js';
 import { summarise } from '../lib/alfred/summary.js';
@@ -97,6 +97,7 @@ export const getApplication = async (req: AuthRequest, res: Response): Promise<v
     reviews: shown.map((r) => ({ id: r.id, reviewer_id: r.reviewer_id, kind: r.kind, scores: r.scores, weighted_score: r.weighted_score, recommendation: r.recommendation, note: r.note, submitted_at: r.submitted_at?.toISOString() ?? null })),
     reviews_disagree: mineDone ? disagree : null,
     criteria: CRITERIA,
+    rubric: { weights: RUBRIC, criteria: CRITERION_GUIDE, ratings: RATING_GUIDE, insufficient_evidence: INSUFFICIENT_EVIDENCE },
   });
 };
 
@@ -121,7 +122,7 @@ const assertReviewer = (app: { claimed_by: string | null; second_reviewer_id: st
 export const saveReview = async (req: AuthRequest, res: Response): Promise<void> => {
   const app = await find(String(req.params.id));
   assertReviewer(app, req.userId!);
-  const b = req.body as { scores: Record<Criterion, number>; recommendation: Decision; note?: string | null };
+  const b = req.body as { scores: Record<Criterion, Rating>; recommendation: Decision; note?: string | null };
   const kind = app.second_reviewer_id === req.userId ? 'second' : 'first';
   const data = { kind, scores: b.scores, weighted_score: weightedScore(b.scores), recommendation: b.recommendation, note: b.note ?? null, submitted_at: new Date() } as const;
   const review = await prisma.applicationReview.upsert({
