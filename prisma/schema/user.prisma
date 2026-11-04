@@ -1,0 +1,127 @@
+enum Role {
+  member
+  mentor
+  moderator
+  admin
+}
+
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  // False for Google sign-ups until the member picks their own handle (they get a placeholder).
+  username_set  Boolean   @default(true)
+  full_name     String
+  email         String    @unique
+  password_hash String?
+  google_id     String?   @unique
+  avatar_url    String?
+  bio           String?
+  social_links  Json?
+  points        Int       @default(0)
+  streak        Int       @default(0)
+  last_login_at DateTime?
+
+  // Age gate: members must be 13 or older. Only the date is stored (no time), and it is
+  // never included in any public profile response.
+  birth_date       DateTime? @db.Date
+  // IANA name such as "Africa/Lagos"; drives "today" for streaks, votes and reminders.
+  timezone         String?
+  role             Role      @default(member)
+  // A suspended member can still sign in and read, but cannot post, comment, vote or message.
+  // Earned every 7-day streak (max 2). One is spent automatically to save a streak after a missed day.
+  streak_freezes   Int       @default(0)
+  suspended_until  DateTime?
+  suspended_reason String?
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+
+  // Email verification — a 6-digit code sent via Resend at signup.
+  // Google accounts skip this (Google already verified the address).
+  email_verified               Boolean   @default(false)
+  verification_code_hash       String?
+  verification_code_expires_at DateTime?
+  verification_attempts        Int       @default(0)
+
+  // Password reset — a separate 6-digit code (+ fallback link, same as
+  // signup) so a reset in progress never collides with signup verification.
+  reset_code_hash       String?
+  reset_code_expires_at DateTime?
+  reset_attempts        Int       @default(0)
+
+  projects          Project[]
+  rsvps             EventRsvp[]
+  posts             Post[]
+  lab_memberships   LabMember[]
+  lab_requests      LabJoinRequest[]
+  conversations     ConversationMember[]
+  messages_sent     Message[]
+  comments          Comment[]
+  reactions         Reaction[]
+  reports_made      Report[]             @relation("reporter")
+  blocks_made       Block[]              @relation("blocker")
+  blocked_by        Block[]              @relation("blocked")
+  lessons_done      LessonProgress[]
+  votes             Vote[]
+  points_log        PointsLog[]
+  notifications     Notification[]
+  sessions          Session[]
+  settings          UserSettings?
+  following         Follow[]             @relation("follower")
+  followers         Follow[]             @relation("following")
+  userBadges        UserBadge[]
+  petActions        PetAction[]
+  petMemories       PetMemory[]
+  pushSubscriptions PushSubscription[]
+  attachments       MessageAttachment[]
+
+  @@map("users")
+}
+
+model Session {
+  id              String    @id @default(uuid())
+  user_id         String
+  token_hash      String    @unique
+  // The token this one replaced, kept briefly so two tabs refreshing at the same moment don't clash.
+  prev_token_hash String?   @unique
+  // How many times this session's refresh token has been replaced. Together with the session id it
+  // lets the server re-create the current token exactly, so a lost response or a second tab is safe.
+  rotation        Int       @default(0)
+  rotated_at      DateTime?
+  device_info     String?
+  ip              String?
+  last_active     DateTime  @default(now())
+  created_at      DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Follow {
+  follower_id  String
+  following_id String
+  created_at   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [follower_id], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [following_id], references: [id], onDelete: Cascade)
+
+  @@id([follower_id, following_id])
+  @@map("follows")
+}
+
+model UserSettings {
+  user_id             String    @id
+  email_notifications Boolean   @default(true)
+  vote_alerts         Boolean   @default(true)
+  contest_updates     Boolean   @default(true)
+  public_profile      Boolean   @default(true)
+  // Alfred's AI brain sends what you type to Alfred to Google or Groq. Off until the member opts in.
+  ai_chat             Boolean   @default(false)
+  ai_consented_at     DateTime?
+  // When the member finished or skipped Alfred's welcome tour. It shows once per account, on any device.
+  alfred_tour_done_at DateTime?
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("settings")
+}

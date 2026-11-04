@@ -1,0 +1,44 @@
+// Learn: short, curated tracks written by the team. Members can't add lessons.
+model Track {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  title       String
+  description String
+  position    Int      @default(0)
+  published   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  lessons Lesson[]
+
+  @@map("tracks")
+}
+
+model Lesson {
+  id       String @id @default(uuid())
+  track_id String
+  slug     String
+  title    String
+  summary  String
+  // Plain text with light formatting: "## Heading", "- bullet", blank line between paragraphs.
+  body     String
+  minutes  Int    @default(5)
+  position Int    @default(0)
+
+  track    Track            @relation(fields: [track_id], references: [id], onDelete: Cascade)
+  progress LessonProgress[]
+
+  @@unique([track_id, slug])
+  @@map("lessons")
+}
+
+model LessonProgress {
+  user_id      String
+  lesson_id    String
+  completed_at DateTime @default(now())
+
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lesson_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, lesson_id])
+  @@map("lesson_progress")
+}

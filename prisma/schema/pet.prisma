@@ -1,0 +1,39 @@
+// How many times each member used Alfred's AI brain each day. No message content is stored.
+model PetUsage {
+  user_id String
+  day     DateTime @db.Date
+  count   Int      @default(0)
+
+  @@id([user_id, day])
+  @@map("pet_usage")
+}
+
+// Everything Alfred did for a member on their say-so, so they can see it and (for a while) undo it.
+model PetAction {
+  id         String    @id @default(uuid())
+  user_id    String
+  kind       String
+  summary    String
+  // What is needed to undo it (a username, a lab id, notification ids). Never message content.
+  payload    Json?
+  undone_at  DateTime?
+  created_at DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@map("pet_actions")
+}
+
+// Short things a member asked Alfred to remember ("I hate gradients"). Visible and deletable by them.
+model PetMemory {
+  id         String   @id @default(uuid())
+  user_id    String
+  text       String
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+  @@map("pet_memories")
+}

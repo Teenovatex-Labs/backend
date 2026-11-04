@@ -1,0 +1,142 @@
+model Project {
+  id                String   @id @default(uuid())
+  user_id           String
+  name              String
+  slug              String   @unique
+  short_description String
+  description       String
+  category          String
+  cover_url         String?
+  demo_url          String?
+  github_url        String?
+  tx_post_url       String?
+  tags              String[]
+  vote_count        Int      @default(0)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+
+  user          User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  votes         Vote[]
+  updates       LabUpdate[]
+  tasks         LabTask[]
+  milestones    LabMilestone[]
+  members       LabMember[]
+  join_requests LabJoinRequest[]
+  chat          Conversation?
+
+  @@map("projects")
+}
+
+model Vote {
+  id         String   @id @default(uuid())
+  user_id    String
+  project_id String
+  voted_at   DateTime @default(now())
+  // The voter's own calendar day. With the unique key below it makes "one vote per project
+  // per day" a database guarantee, so a double-click or two tabs can't slip a second one in.
+  vote_day   DateTime @db.Date
+
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, project_id, vote_day])
+  @@map("votes")
+}
+
+model LabUpdate {
+  id         String   @id @default(uuid())
+  lab_id     String
+  author_id  String
+  title      String
+  body       String
+  created_at DateTime @default(now())
+
+  lab Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+
+  @@index([lab_id, created_at])
+  @@map("lab_updates")
+}
+
+enum TaskStatus {
+  backlog
+  in_progress
+  testing
+  done
+}
+
+model LabTask {
+  id          String     @id @default(uuid())
+  lab_id      String
+  title       String
+  notes       String?
+  status      TaskStatus @default(backlog)
+  position    Int        @default(0)
+  assignee_id String?
+  due_at      DateTime?
+  reminded_at DateTime?
+  created_by  String
+  created_at  DateTime   @default(now())
+  done_at     DateTime?
+
+  lab Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+
+  @@index([lab_id, status, position])
+  @@index([due_at])
+  @@map("lab_tasks")
+}
+
+model LabMilestone {
+  id          String    @id @default(uuid())
+  lab_id      String
+  title       String
+  due_at      DateTime?
+  done_at     DateTime?
+  reminded_at DateTime?
+  created_at  DateTime  @default(now())
+
+  lab Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+
+  @@index([lab_id])
+  @@index([due_at])
+  @@map("lab_milestones")
+}
+
+enum LabRole {
+  owner
+  member
+}
+
+model LabMember {
+  lab_id     String
+  user_id    String
+  role       LabRole  @default(member)
+  created_at DateTime @default(now())
+
+  lab  Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+  user User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([lab_id, user_id])
+  @@index([user_id])
+  @@map("lab_members")
+}
+
+enum JoinStatus {
+  pending
+  accepted
+  declined
+}
+
+model LabJoinRequest {
+  id         String     @id @default(uuid())
+  lab_id     String
+  user_id    String
+  message    String?
+  status     JoinStatus @default(pending)
+  created_at DateTime   @default(now())
+
+  lab  Project @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+  user User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([lab_id, user_id])
+  @@map("lab_join_requests")
+}

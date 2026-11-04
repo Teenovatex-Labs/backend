@@ -1,0 +1,62 @@
+model Space {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  name        String
+  description String
+  position    Int      @default(0)
+  created_at  DateTime @default(now())
+
+  posts Post[]
+
+  @@map("spaces")
+}
+
+model Post {
+  id             String   @id @default(uuid())
+  space_id       String
+  author_id      String
+  title          String
+  body           String
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+  // Soft removal: hidden posts stay for moderators and the audit trail but never show to members.
+  hidden         Boolean  @default(false)
+  comment_count  Int      @default(0)
+  reaction_count Int      @default(0)
+
+  space     Space      @relation(fields: [space_id], references: [id], onDelete: Cascade)
+  author    User       @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  comments  Comment[]
+  reactions Reaction[]
+
+  @@index([space_id, created_at])
+  @@index([author_id])
+  @@map("posts")
+}
+
+model Comment {
+  id         String   @id @default(uuid())
+  post_id    String
+  author_id  String
+  body       String
+  created_at DateTime @default(now())
+  hidden     Boolean  @default(false)
+
+  post   Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  author User @relation(fields: [author_id], references: [id], onDelete: Cascade)
+
+  @@index([post_id, created_at])
+  @@map("comments")
+}
+
+model Reaction {
+  user_id    String
+  post_id    String
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, post_id])
+  @@map("reactions")
+}
