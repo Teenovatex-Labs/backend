@@ -32,6 +32,7 @@ import pushRouter from './routes/push.js';
 import contactRouter from './routes/contact.js';
 import admissionsRouter from './routes/admissions.js';
 import { adminOnboardingRouter, onboardingRouter } from './routes/onboarding.js';
+import { adminBadgeAwardsRouter, adminBadgesRouter, badgesRouter } from './routes/badges.js';
 import adminCohortsRouter from './routes/adminCohorts.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
 
@@ -69,6 +70,9 @@ app.use(`${v1}/learn`, learnRouter);
 app.use(`${v1}/reports`, reportsRouter);
 app.use(`${v1}/blocks`, blocksRouter);
 app.use(`${v1}/admin/cohorts`, adminCohortsRouter);
+app.use(`${v1}/admin/badges`, adminBadgesRouter);
+app.use(`${v1}/admin/badge-awards`, adminBadgeAwardsRouter);
+app.use(`${v1}/badges`, badgesRouter);
 app.use(`${v1}/admin/onboarding`, adminOnboardingRouter);
 app.use(`${v1}/onboarding`, onboardingRouter);
 app.use(`${v1}/admin/applications`, adminApplicationsRouter);

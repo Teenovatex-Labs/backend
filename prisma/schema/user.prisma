@@ -82,6 +82,7 @@ model User {
   // Accepted members have 7 days to finish onboarding; an admin can move this date.
   onboarding_due_at   DateTime?
   onboarding_progress OnboardingProgress[]
+  badge_awards        BadgeAward[]
 
   @@map("users")
 }
