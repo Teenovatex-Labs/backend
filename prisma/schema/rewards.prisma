@@ -152,3 +152,16 @@ model SeasonTotal {
   @@index([season_id])
   @@map("season_totals")
 }
+
+// Admin overrides for what an action is worth. A missing row means "use the default in src/lib/pointRules.ts".
+model PointRule {
+  key        String   @id
+  // Hundredths of a point, like every stored points value.
+  points     Int
+  // Most one member can earn from this rule per UTC day, in hundredths. Null means no cap.
+  daily_cap  Int?
+  updated_by String?
+  updated_at DateTime @updatedAt
+
+  @@map("point_rules")
+}

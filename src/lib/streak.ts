@@ -1,12 +1,10 @@
 import { prisma } from '../db.js';
 import { localDay, shiftDay } from './day.js';
-import { awardPoints } from './points.js';
+import { awardRuleTx } from './pointRules.js';
 import { createNotification } from './notify.js';
 import { checkBadgesQuietly } from './badges.js';
 
-const DAILY_POINTS = 3;
 const MILESTONE_EVERY = 7;
-const MILESTONE_POINTS = 25;
 const MAX_FREEZES = 2;
 
 type StreakUser = { id: string; streak: number; streak_freezes: number; last_login_at: Date | null; timezone: string | null };
@@ -32,9 +30,9 @@ export const recordDailyLogin = async (user: StreakUser, now: Date = new Date())
   await prisma.user.update({ where: { id: user.id }, data: { last_login_at: now, streak, streak_freezes: freezes } });
   if (savedByFreeze) await createNotification(user.id, 'streak', `A streak freeze saved your ${user.streak}-day streak. Nice catch!`, { link: '/home' });
 
-  await awardPoints(user.id, 'streak', DAILY_POINTS, 'Daily login streak');
+  await prisma.$transaction((tx) => awardRuleTx(tx, user.id, 'streak', 'Daily login streak'));
   if (milestone) {
-    await awardPoints(user.id, 'streak_milestone', MILESTONE_POINTS, `${streak}-day streak milestone!`);
+    await prisma.$transaction((tx) => awardRuleTx(tx, user.id, 'streak_milestone', `${streak}-day streak milestone!`));
   }
   checkBadgesQuietly(user.id);
   return streak;
