@@ -118,7 +118,7 @@ export const getApplication = async (req: AuthRequest, res: Response): Promise<v
     current_skills: app.current_skills, learning_goals: app.learning_goals,
     portfolio_url: app.portfolio_url, github_url: app.github_url, linkedin_url: app.linkedin_url,
     second_reviewer_id: app.second_reviewer_id, decided_by: app.decided_by, decision_note: app.decision_note,
-    answers: answers.map((a) => ({ id: a.id, position: a.position, question: a.question_text, source: a.source, criterion: a.criterion, answer: a.answer })),
+    answers: answers.map((a) => ({ id: a.id, position: a.position, question: a.question_text, source: a.source, format: a.format, criterion: a.criterion, answer: ((a.answer as { text?: unknown } | null)?.text as string | undefined) ?? '' })),
     attachments: attachments.map((a) => ({ id: a.id, kind: a.kind, url: a.url, filename: a.filename, scan_status: a.scan_status })),
     clarifications: clarifications.map((c) => ({ id: c.id, question: c.question, response: c.response, status: c.status, due_at: c.due_at.toISOString() })),
     reviews: shown.map((r) => ({ id: r.id, reviewer_id: r.reviewer_id, kind: r.kind, scores: r.scores, weighted_score: r.weighted_score, recommendation: r.recommendation, note: r.note, submitted_at: r.submitted_at?.toISOString() ?? null })),
