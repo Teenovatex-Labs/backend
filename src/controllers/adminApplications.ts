@@ -8,6 +8,7 @@ import { can } from '../lib/permissions.js';
 import { CRITERIA, weightedScore, type Criterion } from '../lib/rubric.js';
 import { RETENTION_MS } from '../lib/admissions.js';
 import { sendClarificationRequest } from '../lib/admissionsEmail.js';
+import { summarise } from '../lib/alfred/summary.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 const PAGE = 20;
@@ -52,6 +53,22 @@ export const applicationStats = async (req: Request, res: Response): Promise<voi
 };
 
 /** A reviewer may see another reviewer's review only after submitting their own. */
+/**
+ * An optional reading aid for the reviewer. It is generated on request, never stored, never changes a score or a
+ * status, and is labelled as machine-written. Each use is audited without keeping its text.
+ */
+export const summariseApplication = async (req: AuthRequest, res: Response): Promise<void> => {
+  const app = await find(String(req.params.id));
+  const answers = await prisma.applicationAnswer.findMany({ where: { application_id: app.id }, orderBy: { position: 'asc' } });
+  const result = await summarise({ ...app, answers });
+  await audit(req.userId!, 'application.summary', { type: 'application', id: app.id }, { ok: result.ok, ...(result.ok ? { prompt_version: result.prompt_version } : { reason: result.reason }) });
+  if (!result.ok) {
+    const message = { DISABLED: 'Summaries are switched off.', SENSITIVE: 'Read this application in full: something in it needs a person.', FAILED: 'A summary could not be made. Please read the answers directly.' }[result.reason];
+    throw new HttpError(result.reason === 'FAILED' ? 502 : 409, `SUMMARY_${result.reason}`, message);
+  }
+  res.json({ summary: result.summary, machine_written: true, notice: 'Machine-written reading aid. It does not recommend or score anyone. Check it against the answers.' });
+};
+
 export const getApplication = async (req: AuthRequest, res: Response): Promise<void> => {
   const app = await find(String(req.params.id));
   const reviews = await prisma.applicationReview.findMany({ where: { application_id: app.id }, orderBy: { created_at: 'asc' } });

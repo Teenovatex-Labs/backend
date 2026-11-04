@@ -12,6 +12,7 @@ router.get('/', c.listApplications);
 router.get('/stats', c.applicationStats);
 router.get('/:id', c.getApplication);
 router.get('/:id/attachments/:attId/link', reviewerLink);
+router.post('/:id/summary', c.summariseApplication);
 router.post('/:id/claim', c.claimApplication);
 router.post('/:id/review', validate(reviewSchema), c.saveReview);
 router.post('/:id/second-review', validate(secondReviewSchema), c.assignSecondReviewer);
