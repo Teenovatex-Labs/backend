@@ -21,7 +21,7 @@ describe('voting', () => {
     const res = await vote(lab.id, voter.auth);
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ new_vote_count: 1, points_awarded: 10, votes_remaining_today: 2 });
-    expect((await prisma.user.findUnique({ where: { id: owner.user.id } }))?.points).toBe(10);
+    expect((await prisma.user.findUnique({ where: { id: owner.user.id } }))?.points).toBe(1000);
   });
 
   it('refuses a second vote on the same lab the same day', async () => {

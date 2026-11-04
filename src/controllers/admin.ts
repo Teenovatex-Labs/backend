@@ -1,3 +1,4 @@
+import { fromScaled } from '../lib/pointsMath.js';
 import type { Response } from 'express';
 import type { Prisma, Role } from '@prisma/client';
 import type { AuthRequest } from '../middleware/auth.js';
@@ -199,7 +200,7 @@ export const listUsers = async (req: AuthRequest, res: Response): Promise<void> 
   ]);
   const counts = await prisma.report.groupBy({ by: ['target_user_id'], where: { target_user_id: { in: users.map((u) => u.id) } }, _count: { _all: true } });
   const byUser = new Map(counts.map((c) => [c.target_user_id, c._count._all]));
-  res.json({ items: users.map((u) => ({ ...u, reports_against: byUser.get(u.id) ?? 0 })), total, page, pages: Math.ceil(total / PAGE) });
+  res.json({ items: users.map((u) => ({ ...u, points: fromScaled(u.points), reports_against: byUser.get(u.id) ?? 0 })), total, page, pages: Math.ceil(total / PAGE) });
 };
 
 export const suspendUser = async (req: AuthRequest, res: Response): Promise<void> => {

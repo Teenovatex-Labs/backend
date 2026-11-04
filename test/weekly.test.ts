@@ -9,12 +9,12 @@ beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 
 const earn = (user_id: string, points: number, daysAgo = 0) =>
-  prisma.pointsLog.create({ data: { user_id, points, reason: 'test', kind: 'other', created_at: new Date(Date.now() - daysAgo * 86400000) } });
+  prisma.pointsLog.create({ data: { user_id, points: points * 100, reason: 'test', kind: 'other', created_at: new Date(Date.now() - daysAgo * 86400000) } });
 
 describe('the weekly leaderboard', () => {
   it('ranks by points earned in the last 7 days, not all time', async () => {
-    const veteran = await makeUser({ points: 1000 });
-    const rising = await makeUser({ points: 30 });
+    const veteran = await makeUser({ points: 100000 });
+    const rising = await makeUser({ points: 3000 });
     await earn(veteran.user.id, 1000, 40); // a long time ago
     await earn(veteran.user.id, 5, 1);
     await earn(rising.user.id, 30, 2);

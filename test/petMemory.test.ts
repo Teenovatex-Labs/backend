@@ -81,7 +81,7 @@ describe('what the model is told', () => {
   it('includes the member’s own context, memories and the recent chat, all marked as data', async () => {
     const prompt = capture();
     const me = await optIn();
-    await prisma.user.update({ where: { id: me.user.id }, data: { points: 42, streak: 4 } });
+    await prisma.user.update({ where: { id: me.user.id }, data: { points: 4200, streak: 4 } });
     await prisma.petMemory.create({ data: { user_id: me.user.id, text: 'I hate gradients' } });
     const lab = await makeProject(me.user.id);
     await prisma.labMember.create({ data: { lab_id: lab.id, user_id: me.user.id, role: 'owner' } });

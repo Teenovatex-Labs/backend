@@ -57,7 +57,7 @@ describe('learn', () => {
     expect(first.body).toEqual({ completed: true, points_awarded: 5 });
     const second = await request(app).post(`/api/v1/learn/lessons/${id}/complete`).set(me.auth);
     expect(second.body.points_awarded).toBe(0);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(5);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(500);
 
     const shown = await request(app).get('/api/v1/learn/tracks/first-site/lessons/what-is-a-website').set(me.auth);
     expect(shown.body.completed).toBe(true);
@@ -68,7 +68,7 @@ describe('learn', () => {
     const me = await makeUser();
     const id = track.lessons[0]!.id;
     await Promise.all([1, 2, 3, 4].map(() => request(app).post(`/api/v1/learn/lessons/${id}/complete`).set(me.auth)));
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(5);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(500);
   });
 
   it('needs sign-in and a real lesson', async () => {

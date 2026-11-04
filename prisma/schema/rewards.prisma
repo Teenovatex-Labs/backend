@@ -13,13 +13,18 @@ enum PointsKind {
 model PointsLog {
   id           String     @id @default(uuid())
   user_id      String
+  // Hundredths of a point: 150 means 1.5. See src/lib/pointsMath.ts.
   points       Int
   reason       String
   kind         PointsKind @default(other)
   reference_id String?
+  season_id    String?
   created_at   DateTime   @default(now())
 
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user   User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  season Season? @relation(fields: [season_id], references: [id])
+
+  @@index([season_id])
 
   @@map("points_log")
 }
@@ -116,4 +121,34 @@ model BadgeAward {
   @@index([user_id])
   @@index([badge_id])
   @@map("badge_awards")
+}
+
+// Points are counted per season. Season 0 holds everything earned before seasons existed (legacy).
+model Season {
+  id        String    @id @default(uuid())
+  number    Int       @unique
+  name      String
+  starts_at DateTime  @default(now())
+  ends_at   DateTime?
+  is_current Boolean  @default(false)
+  created_by String?
+
+  totals SeasonTotal[]
+  log    PointsLog[]
+
+  @@map("seasons")
+}
+
+// Each member's final total for a finished season, in hundredths of a point.
+model SeasonTotal {
+  user_id   String
+  season_id String
+  points    Int
+
+  user   User   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  season Season @relation(fields: [season_id], references: [id])
+
+  @@id([user_id, season_id])
+  @@index([season_id])
+  @@map("season_totals")
 }

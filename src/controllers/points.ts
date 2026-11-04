@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
+import { fromScaled } from '../lib/pointsMath.js';
 
 export const getMyPoints = async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { points: true } });
@@ -14,7 +15,7 @@ export const getMyPoints = async (req: AuthRequest, res: Response): Promise<void
 
   // Totals come from the whole history, grouped by the typed kind (not by guessing from the text).
   const grouped = await prisma.pointsLog.groupBy({ by: ['kind'], where: { user_id: req.userId }, _sum: { points: true } });
-  const sum = (...kinds: string[]) => grouped.filter((g) => kinds.includes(g.kind)).reduce((n, g) => n + (g._sum.points ?? 0), 0);
+  const sum = (...kinds: string[]) => grouped.filter((g) => kinds.includes(g.kind)).reduce((n, g) => n + fromScaled(g._sum.points ?? 0), 0);
   const breakdown = {
     votes_received: sum('vote_received', 'vote_removed'),
     posts_tagged: sum('post_tagged'),
@@ -23,11 +24,11 @@ export const getMyPoints = async (req: AuthRequest, res: Response): Promise<void
   };
 
   res.json({
-    total_points: user.points,
+    total_points: fromScaled(user.points),
     breakdown,
     activity: activity.map((a) => ({
       description: a.reason,
-      points: a.points,
+      points: fromScaled(a.points),
       timestamp: a.created_at,
     })),
   });
@@ -59,7 +60,7 @@ export const getLeaderboard = async (req: Request, res: Response): Promise<void>
       period: 'week',
       leaderboard: grouped.flatMap((g, i) => {
         const p = byId.get(g.user_id);
-        return p ? [{ rank: skip + i + 1, username: p.username, avatar_url: p.avatar_url, points: g._sum.points ?? 0, vote_count: p._count.votes }] : [];
+        return p ? [{ rank: skip + i + 1, username: p.username, avatar_url: p.avatar_url, points: fromScaled(g._sum.points ?? 0), vote_count: p._count.votes }] : [];
       }),
     });
     return;
@@ -82,7 +83,7 @@ export const getLeaderboard = async (req: Request, res: Response): Promise<void>
     rank: skip + i + 1,
     username: u.username,
     avatar_url: u.avatar_url,
-    points: u.points,
+    points: fromScaled(u.points),
     vote_count: u._count.votes,
   }));
 
