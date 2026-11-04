@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 import { slugify, uniqueSlug } from '../lib/slug.js';
-import { awardPoints } from '../lib/points.js';
+import { awardRuleTx } from '../lib/pointRules.js';
 import { uploadToCloudinary } from '../middleware/upload.js';
 import { createProjectSchema } from '../schemas/project.js';
 import { dayToDb, localDay } from '../lib/day.js';
@@ -51,7 +51,7 @@ export const createProject = async (req: MulterAuthRequest, res: Response): Prom
   });
 
   if (tx_post_url) {
-    await awardPoints(req.userId!, 'post_tagged', 5, 'Posted update and tagged TX', project.id);
+    await prisma.$transaction((tx) => awardRuleTx(tx, req.userId!, 'post_tagged', 'Posted update and tagged TX', project.id));
   }
 
   checkBadgesQuietly(req.userId);

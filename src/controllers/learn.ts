@@ -1,10 +1,9 @@
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
-import { awardPointsTx } from '../lib/points.js';
+import { awardRuleTx } from '../lib/pointRules.js';
 import { checkBadgesQuietly } from '../lib/badges.js';
 
-const LESSON_POINTS = 5;
 
 export const listTracks = async (req: AuthRequest, res: Response): Promise<void> => {
   const tracks = await prisma.track.findMany({
@@ -99,8 +98,7 @@ export const completeLesson = async (req: AuthRequest, res: Response): Promise<v
   const awarded = await prisma.$transaction(async (tx) => {
     const { count } = await tx.lessonProgress.createMany({ data: [{ user_id: userId, lesson_id: id }], skipDuplicates: true });
     if (count === 0) return 0;
-    await awardPointsTx(tx, userId, 'lesson', LESSON_POINTS, `Finished lesson "${lesson.title}"`, id);
-    return LESSON_POINTS;
+    return awardRuleTx(tx, userId, 'lesson', `Finished lesson "${lesson.title}"`, id);
   });
 
   if (awarded > 0) checkBadgesQuietly(userId);

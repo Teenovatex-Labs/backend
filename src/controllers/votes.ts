@@ -3,12 +3,12 @@ import { Prisma } from '@prisma/client';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
 import { awardPointsTx } from '../lib/points.js';
+import { awardRuleTx, resolveRule } from '../lib/pointRules.js';
 import { createNotification } from '../lib/notify.js';
 import { dayToDb, localDay, nextLocalMidnight } from '../lib/day.js';
 import { checkBadgesQuietly } from '../lib/badges.js';
 
 const MAX_DAILY_VOTES = 3;
-const VOTE_POINTS = 10;
 
 const timezoneOf = async (userId: string) =>
   (await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }))?.timezone ?? null;
@@ -47,8 +47,7 @@ export const castVote = async (req: AuthRequest, res: Response): Promise<void> =
       // Voting for your own lab is allowed but earns nothing, so it can't be farmed.
       let awarded = 0;
       if (!isOwn) {
-        awarded = VOTE_POINTS;
-        await awardPointsTx(tx, project.user_id, 'vote_received', VOTE_POINTS, `Vote received on lab "${project.name}"`, project_id);
+        awarded = await awardRuleTx(tx, project.user_id, 'vote_received', `Vote received on lab "${project.name}"`, project_id);
       }
       return { kind: 'ok', vote_count: updated.vote_count, used: used + 1, awarded };
     });
@@ -101,7 +100,8 @@ export const removeVoteFor = async (userId: string, project_id: string): Promise
     const updated = await tx.project.update({ where: { id: project_id }, data: { vote_count: { decrement: 1 } } });
     // Take back exactly what this vote earned the lab's owner.
     if (vote.project.user_id !== userId) {
-      await awardPointsTx(tx, vote.project.user_id, 'vote_removed', -VOTE_POINTS, `Vote removed on lab "${vote.project.name}"`, project_id);
+      const { points: voteWorth } = await resolveRule(tx, 'vote_received');
+      await awardPointsTx(tx, vote.project.user_id, 'vote_removed', -voteWorth, `Vote removed on lab "${vote.project.name}"`, project_id);
     }
     return updated.vote_count;
   });
