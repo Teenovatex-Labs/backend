@@ -1,0 +1,20 @@
+import { Router } from 'express';
+import * as c from '../controllers/adminApplications.js';
+import { requireAuth, requirePermission } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { clarificationSchema, decisionSchema, reverseSchema, reviewSchema, secondReviewSchema } from '../schemas/admissions.js';
+
+const router = Router();
+router.use(requireAuth, requirePermission('applications.review'));
+
+router.get('/', c.listApplications);
+router.get('/stats', c.applicationStats);
+router.get('/:id', c.getApplication);
+router.post('/:id/claim', c.claimApplication);
+router.post('/:id/review', validate(reviewSchema), c.saveReview);
+router.post('/:id/second-review', validate(secondReviewSchema), c.assignSecondReviewer);
+router.post('/:id/clarification', validate(clarificationSchema), c.askClarification);
+router.post('/:id/decision', validate(decisionSchema), c.decide);
+router.post('/:id/reverse', validate(reverseSchema), c.reverse);
+
+export default router;

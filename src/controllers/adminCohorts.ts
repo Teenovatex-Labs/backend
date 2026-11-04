@@ -2,7 +2,8 @@ import type { Request, Response } from 'express';
 import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
-import { windowState } from '../lib/admissions.js';
+import { INVITE_DAYS, RETENTION_MS, newInvitation, windowState } from '../lib/admissions.js';
+import { sendAcceptance, sendDecline, sendWaitlisted } from '../lib/admissionsEmail.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
 type Dates = { opens_at: Date; closes_at: Date; decisions_publish_at: Date };
@@ -67,4 +68,54 @@ export const updateCohort = async (req: AuthRequest, res: Response): Promise<voi
   });
   await audit(req.userId!, 'cohort.update', { type: 'application_window', id });
   res.json(shape(w));
+};
+
+/**
+ * Publishes the window's decisions all at once, on or after the announced date. Accepted applicants get a
+ * single-use, email-bound, expiring invitation; declined ones start the 6-month retention clock.
+ * Running it twice is safe: anything already released is skipped.
+ */
+export const releaseCohort = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.id);
+  const w = await prisma.applicationWindow.findUnique({ where: { id } });
+  if (!w) throw new HttpError(404, 'NOT_FOUND', 'Window not found');
+  if (new Date() < w.decisions_publish_at) throw new HttpError(409, 'TOO_EARLY', 'Results are released on the announced decision date, not before');
+  const { allow_undecided } = req.body as { allow_undecided?: boolean };
+
+  const undecided = await prisma.application.count({ where: { window_id: id, status: { in: ['submitted', 'under_review', 'shortlisted'] } } });
+  if (undecided > 0 && !allow_undecided) {
+    throw new HttpError(409, 'UNDECIDED', `${undecided} application(s) have no decision yet. Decide them, or release anyway and they stay under review.`);
+  }
+
+  const apps = await prisma.application.findMany({ where: { window_id: id, status: { in: ['accepted', 'declined', 'waitlisted'] }, published_at: null } });
+  let invited = 0;
+  for (const a of apps) {
+    const now = new Date();
+    const invite = a.status === 'accepted' ? newInvitation() : null;
+    // The release mark and the invitation are written together, so a crash can never leave an accepted
+    // applicant published without an invitation. Emails go out afterwards; a retry skips anything released.
+    const claimed = await prisma.$transaction(async (tx) => {
+      const c = await tx.application.updateMany({
+        where: { id: a.id, published_at: null },
+        data: { published_at: now, ...(a.status === 'declined' && { retention_delete_at: new Date(now.getTime() + RETENTION_MS) }) },
+      });
+      if (c.count === 0) return false;
+      if (invite) {
+        await tx.invitation.create({ data: { token_hash: invite.hash, email: a.email, role: 'member', source: 'application', application_id: a.id, expires_at: invite.expires, created_by: req.userId } });
+      }
+      return true;
+    });
+    if (!claimed) continue;
+    if (invite) invited++;
+    try {
+      if (invite) await sendAcceptance(a.email, invite.token, INVITE_DAYS);
+      else if (a.status === 'declined') await sendDecline(a.email, a.decline_feedback);
+      else await sendWaitlisted(a.email);
+    } catch (err) {
+      console.error('Decision email failed:', err);
+    }
+  }
+  await prisma.applicationWindow.update({ where: { id }, data: { status: 'published' } });
+  await audit(req.userId!, 'cohort.release', { type: 'application_window', id }, { released: apps.length, invited });
+  res.json({ released: apps.length, invited, still_under_review: undecided });
 };
