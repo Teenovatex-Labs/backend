@@ -12,7 +12,7 @@ import {
   publicStatus,
   windowState,
 } from '../lib/admissions.js';
-import { sendApplicationLink, sendApplicationReceived } from '../lib/admissionsEmail.js';
+import { sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
 import { needsGuardian } from '../lib/guardian.js';
 import { createNotification } from '../lib/notify.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
@@ -98,6 +98,32 @@ export const startApplication = async (req: Request, res: Response): Promise<voi
     await sendApplicationLink(b.email, link.token);
   } catch (err) {
     console.error('Application link email failed:', err);
+  }
+  res.status(202).json(NEUTRAL);
+};
+
+/**
+ * "Where do I stand?" The page always gets the same answer, whoever asks and whatever we hold. The real
+ * answer goes only to the inbox: a member is pointed to login, an applicant gets a fresh link to their
+ * own application, anyone else is told there is nothing. Proving the inbox is the proof of ownership.
+ */
+export const lookupStatus = async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body as { email: string };
+  try {
+    if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+      await sendLookupMember(email);
+    } else {
+      const latest = await prisma.application.findFirst({ where: { email, status: { not: 'withdrawn' } }, orderBy: { created_at: 'desc' } });
+      if (latest) {
+        const link = newResumeToken();
+        await prisma.application.update({ where: { id: latest.id }, data: { resume_token_hash: link.hash, resume_expires_at: link.expires } });
+        await sendApplicationLink(email, link.token);
+      } else {
+        await sendLookupNone(email);
+      }
+    }
+  } catch (err) {
+    console.error('Status lookup failed:', err);
   }
   res.status(202).json(NEUTRAL);
 };
