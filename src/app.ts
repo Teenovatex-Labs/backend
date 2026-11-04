@@ -23,6 +23,7 @@ import rewardsRouter from './routes/rewards.js';
 import searchRouter from './routes/search.js';
 import realtimeRouter from './routes/realtime.js';
 import { startReminders } from './jobs/reminders.js';
+import { startApplicationReminders } from './jobs/applicationReminders.js';
 import { startRetention } from './jobs/retention.js';
 import pointsRouter from './routes/points.js';
 import leaderboardRouter from './routes/leaderboard.js';
@@ -123,6 +124,7 @@ if (config.env !== 'test') {
   app.listen(config.port, () => console.log(`Server running on port http://localhost:${config.port}`));
   startReminders();
   startRetention();
+  startApplicationReminders();
 }
 
 export { app };
