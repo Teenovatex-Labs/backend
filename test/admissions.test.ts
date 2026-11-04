@@ -85,6 +85,11 @@ describe('the applicant journey', () => {
     const edit = await request(app).patch('/api/v1/applications/draft').set(bearer(token)).send({ interests: ['ai', 'design'] });
     expect(edit.status).toBe(200);
 
+    expect((await request(app).post('/api/v1/applications/submit').set(bearer(token))).body.code).toBe('INTERVIEW_INCOMPLETE');
+    for (let i = 1; i <= 8; i++) {
+      const q = await request(app).post('/api/v1/applications/interview/next').set(bearer(token));
+      await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(bearer(token)).send({ answer: `Answer number ${i}` });
+    }
     const sub = await request(app).post('/api/v1/applications/submit').set(bearer(token));
     expect(sub.status).toBe(200);
     expect(sub.body.status).toBe('submitted');
@@ -109,6 +114,10 @@ describe('the applicant journey', () => {
     const w = await openWindow();
     const { token } = await start();
     await request(app).patch('/api/v1/applications/draft').set(bearer(token)).send({ interests: ['ai'] });
+    for (let i = 1; i <= 8; i++) {
+      const q = await request(app).post('/api/v1/applications/interview/next').set(bearer(token));
+      await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(bearer(token)).send({ answer: `Answer ${i}` });
+    }
     await prisma.applicationWindow.update({ where: { id: w.id }, data: { closes_at: new Date(Date.now() - 1000) } });
     const late = await request(app).post('/api/v1/applications/submit').set(bearer(token));
     expect(late.status).toBe(409);

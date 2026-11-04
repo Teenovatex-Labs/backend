@@ -54,6 +54,8 @@ const buildSchema = (isProduction: boolean) => {
       PET_PROVIDER_ORDER: z.string().default('gemini,groq'),
       PET_DAILY_LIMIT: z.coerce.number().int().positive().default(40),
       // Global kill switch: set to "false" to turn the AI brain off for everyone at once.
+      // Separate kill switch for the admissions interview. "false" falls back to the fixed question bank at once.
+      ADMISSIONS_AI_ENABLED: z.string().default('true'),
       PET_AI_ENABLED: z.string().default('true'),
       // Comma-separated emails that become admin automatically once they have verified the address.
       ADMIN_EMAILS: z.string().optional(),
@@ -98,6 +100,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     requireInvitation: c.REQUIRE_INVITATION === 'true',
     guardianAgeBelow: c.GUARDIAN_AGE_BELOW,
     onboarding: { whatsappUrl: c.ONBOARDING_WHATSAPP_URL, hcbUrl: c.ONBOARDING_HCB_URL },
+    admissionsAiEnabled: c.ADMISSIONS_AI_ENABLED !== 'false',
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
       dailyLimit: c.PET_DAILY_LIMIT,
