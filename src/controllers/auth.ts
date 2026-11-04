@@ -28,6 +28,7 @@ import {
 } from '../lib/verification.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 import { checkInvitation, consumeInvitation, gateIsOn, inviteMessage, onboardingStart } from '../lib/invitations.js';
+const REMOVED_MESSAGE = 'This account is no longer active. If you think this is a mistake, contact the TeenovateX team.';
 
 const googleClient = new OAuth2Client(config.googleClientId);
 
@@ -197,6 +198,10 @@ export const verifyEmail = async (req: Request, res: Response): Promise<void> =>
     },
   });
 
+  if (user.membership_status === 'removed') {
+    res.status(403).json({ error: REMOVED_MESSAGE, code: 'ACCOUNT_REMOVED' });
+    return;
+  }
   await promoteIfAdminEmail(user); // reached only after the email is verified (code, password on a verified account, or Google)
   await recordDailyLogin(user);
 
@@ -248,6 +253,10 @@ export const login = async (req: Request, res: Response): Promise<void> => {
   }
   if (!(await bcrypt.compare(password, user.password_hash))) {
     res.status(401).json({ error: 'Invalid credentials', code: 'INVALID_CREDENTIALS' });
+    return;
+  }
+  if (user.membership_status === 'removed') {
+    res.status(403).json({ error: REMOVED_MESSAGE, code: 'ACCOUNT_REMOVED' });
     return;
   }
   if (!user.email_verified) {
