@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from 'express';
 import type { Role } from '@prisma/client';
 import { prisma } from '../db.js';
 import { verifyAccessToken } from '../lib/tokens.js';
+import { can, type Permission } from '../lib/permissions.js';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -46,6 +47,18 @@ export const requireRole =
   async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
     const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } });
     if (!user || !roles.includes(user.role)) {
+      res.status(403).json({ error: 'You do not have access to this', code: 'FORBIDDEN' });
+      return;
+    }
+    next();
+  };
+
+/** The member's role must hold EVERY listed permission. Always place after requireAuth. */
+export const requirePermission =
+  (...permissions: Permission[]) =>
+  async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+    const user = await prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } });
+    if (!user || !permissions.every((p) => can(user.role, p))) {
       res.status(403).json({ error: 'You do not have access to this', code: 'FORBIDDEN' });
       return;
     }

@@ -7,6 +7,7 @@ import { createNotification } from '../lib/notify.js';
 import { assertClean } from '../lib/guard.js';
 import { levelFor } from '../lib/levels.js';
 import { BADGES, checkBadgesQuietly } from '../lib/badges.js';
+import { permissionsFor } from '../lib/permissions.js';
 
 const publicSelect = {
   id: true,
@@ -56,6 +57,7 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     age_confirmed: birth_date !== null,
     has_password: !!password_hash,
     has_google: !!google_id,
+    permissions: permissionsFor(user.role),
     level: levelFor(user.points),
     rank: await getRank(user.points),
   });
