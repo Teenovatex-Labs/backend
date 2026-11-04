@@ -3,6 +3,7 @@ import { config } from '../../config.js';
 import { prisma } from '../../db.js';
 import { audit } from '../audit.js';
 import { createNotification } from '../notify.js';
+import { send } from '../resend.js';
 import { generate, hasProviders } from '../pet/providers.js';
 import { FOCUS, TOTAL_QUESTIONS, criterionFor, pickFallback } from './questions.js';
 import { PROMPT_VERSION, SYSTEM, userPrompt } from './persona.js';
@@ -93,6 +94,23 @@ export const interviewState = async (app: Application) => {
   };
 };
 
+/**
+ * Serious safety matters go only to the designated safeguarding lead and deputy, never to every reviewer.
+ * If none are configured yet, admins are told instead (the smallest group that exists) and a warning is
+ * logged, because an alert nobody sees is worse than one a few too many people see.
+ */
+const alertSafeguarding = async (reference: string) => {
+  const designated = config.safeguardingEmails;
+  const people = designated.length
+    ? await prisma.user.findMany({ where: { email: { in: designated } }, select: { id: true, email: true } })
+    : await prisma.user.findMany({ where: { role: 'admin' }, select: { id: true, email: true } });
+  if (!designated.length) console.warn('SAFEGUARDING_LEAD_EMAILS is not set: safeguarding alerts are going to admins.');
+  const message = `Safeguarding: please read application ${reference} today`;
+  await Promise.all(people.map((p) => createNotification(p.id, 'application', message, { link: '/admin/applications' })));
+  // Designated people may not be logged in, so they are also emailed. The email says nothing about the content.
+  await Promise.all((designated.length ? designated : []).map((to) => send(to, 'Safeguarding alert: please open the admin console', '<p>An application needs a safeguarding review today. Open the admin console and read it with care. This email deliberately says nothing more.</p>', 'Safeguarding alert', reference).catch((err) => console.error('Safeguarding email failed:', err))));
+};
+
 /** Saves (or edits) an answer. Returns the fixed safety message if the answer needs a person. */
 export const saveAnswer = async (app: Application, position: number, text: string) => {
   const row = await prisma.applicationAnswer.findUnique({ where: { application_id_position: { application_id: app.id, position } } });
@@ -106,7 +124,6 @@ export const saveAnswer = async (app: Application, position: number, text: strin
   if (!isSensitive(text)) return { safety: null };
 
   await audit(null, 'application.safeguarding_flag', { type: 'application', id: app.id }, { reference: app.reference, position });
-  const staff = await prisma.user.findMany({ where: { role: { in: ['admin', 'moderator'] } }, select: { id: true } });
-  await Promise.all(staff.map((s) => createNotification(s.id, 'application', `Safeguarding: please read application ${app.reference} today`, { link: '/admin/applications' })));
+  await alertSafeguarding(app.reference);
   return { safety: SAFETY_REPLY };
 };

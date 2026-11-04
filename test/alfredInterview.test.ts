@@ -29,6 +29,7 @@ beforeEach(async () => {
   gen.calls.length = 0;
   gen.reply = JSON.stringify({ question: 'You mentioned robots. What is the first thing you would teach one to do?' });
   config.admissionsAiEnabled = true;
+  config.safeguardingEmails = [];
 });
 afterAll(async () => {
   config.admissionsAiEnabled = true;
@@ -103,16 +104,29 @@ describe('Alfred interview', () => {
 
   it('answers a worrying message with the fixed reply, alerts staff, and stops the interview', async () => {
     const { auth, a } = await setup();
-    const admin = await makeUser({ role: 'admin' });
+    const lead = await makeUser({ role: 'moderator' });
+    const other = await makeUser({ role: 'admin' });
+    config.safeguardingEmails = [lead.user.email];
     await next(auth);
     gen.calls.length = 0;
     const res = await answer(auth, 1, 'honestly sometimes I want to die');
     expect(res.body.safety_message).toMatch(/trust/);
     expect(res.body.can_submit).toBe(true);
-    expect(await prisma.notification.count({ where: { user_id: admin.user.id, message: { contains: a.reference } } })).toBe(1);
+    expect(await prisma.notification.count({ where: { user_id: lead.user.id, message: { contains: a.reference } } })).toBe(1);
+    expect(await prisma.notification.count({ where: { user_id: other.user.id } })).toBe(0); // not every reviewer
     expect(await prisma.auditLog.count({ where: { action: 'application.safeguarding_flag' } })).toBe(1);
     expect((await next(auth)).body.next).toBeNull();
     expect(gen.calls).toHaveLength(0); // nothing about it reached a provider
+  });
+
+  it('falls back to admins only, never moderators, when no safeguarding lead is configured', async () => {
+    const { auth } = await setup();
+    const admin = await makeUser({ role: 'admin' });
+    const mod = await makeUser({ role: 'moderator' });
+    await next(auth);
+    await answer(auth, 1, 'I have been thinking about suicide');
+    expect(await prisma.notification.count({ where: { user_id: admin.user.id } })).toBe(1);
+    expect(await prisma.notification.count({ where: { user_id: mod.user.id } })).toBe(0);
   });
 
   it('rejects over-long answers and unknown questions', async () => {

@@ -55,6 +55,9 @@ const buildSchema = (isProduction: boolean) => {
       PET_DAILY_LIMIT: z.coerce.number().int().positive().default(40),
       // Global kill switch: set to "false" to turn the AI brain off for everyone at once.
       // Separate kill switch for the admissions interview. "false" falls back to the fixed question bank at once.
+      // Comma-separated emails of the designated safeguarding lead and deputy (docs/SAFEGUARDING-ROLES.md, section E).
+      // Serious safety alerts go only to them. Unset, they fall back to admins and a warning is logged.
+      SAFEGUARDING_LEAD_EMAILS: z.string().optional(),
       ADMISSIONS_AI_ENABLED: z.string().default('true'),
       PET_AI_ENABLED: z.string().default('true'),
       // Comma-separated emails that become admin automatically once they have verified the address.
@@ -100,6 +103,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     requireInvitation: c.REQUIRE_INVITATION === 'true',
     guardianAgeBelow: c.GUARDIAN_AGE_BELOW,
     onboarding: { whatsappUrl: c.ONBOARDING_WHATSAPP_URL, hcbUrl: c.ONBOARDING_HCB_URL },
+    safeguardingEmails: splitKeys(c.SAFEGUARDING_LEAD_EMAILS).map((e) => e.toLowerCase()),
     admissionsAiEnabled: c.ADMISSIONS_AI_ENABLED !== 'false',
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
