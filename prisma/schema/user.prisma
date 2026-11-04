@@ -86,6 +86,7 @@ model User {
   badge_awards        BadgeAward[]
   challenge_entries   ChallengeEntry[]
   pairings            PairingMember[]
+  inactivity_reviews  InactivityReview[]
 
   // Optional topics a member picks for themselves; admins use them to suggest pairings.
   interests               String[]      @default([])

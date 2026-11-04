@@ -37,6 +37,7 @@ import seasonsRouter from './routes/seasons.js';
 import pointRulesRouter from './routes/pointRules.js';
 import { adminChallengesRouter, challengesRouter } from './routes/challenges.js';
 import { adminPairingRouter, pairingRouter } from './routes/pairing.js';
+import { adminMembershipRouter, membershipRouter } from './routes/membership.js';
 import adminCohortsRouter from './routes/adminCohorts.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
 
@@ -80,6 +81,8 @@ app.use(`${v1}/admin/challenges`, adminChallengesRouter);
 app.use(`${v1}/challenges`, challengesRouter);
 app.use(`${v1}/admin`, adminPairingRouter);
 app.use(`${v1}/pairings`, pairingRouter);
+app.use(`${v1}/admin`, adminMembershipRouter);
+app.use(`${v1}/membership`, membershipRouter);
 app.use(`${v1}/admin/badges`, adminBadgesRouter);
 app.use(`${v1}/admin/badge-awards`, adminBadgeAwardsRouter);
 app.use(`${v1}/badges`, badgesRouter);

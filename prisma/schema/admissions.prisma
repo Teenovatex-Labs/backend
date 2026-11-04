@@ -328,3 +328,31 @@ model ApplicationReminder {
   @@unique([email, window_id])
   @@map("application_reminders")
 }
+
+enum InactivityReviewStatus {
+  open
+  decided
+}
+
+// A fair, documented process before anyone is removed for inactivity. Nothing here runs by itself:
+// an admin starts a review and an admin decides it.
+model InactivityReview {
+  id              String                 @id @default(uuid())
+  user_id         String
+  status          InactivityReviewStatus @default(open)
+  reason          String
+  started_by      String
+  response_due_at DateTime
+  member_response String?
+  responded_at    DateTime?
+  decision        MembershipStatus?
+  decision_reason String?
+  decided_by      String?
+  decided_at      DateTime?
+  created_at      DateTime               @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, status])
+  @@map("inactivity_reviews")
+}
