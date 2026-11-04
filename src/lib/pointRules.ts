@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PointsKind } from '@prisma/client';
 import { awardPointsTx } from './points.js';
 import { fromScaled, toScaled } from './pointsMath.js';
 
@@ -12,9 +12,15 @@ export const RULES = {
   lesson: { points: 5, daily_cap: null, description: 'Finishing a lesson' },
   streak: { points: 3, daily_cap: null, description: 'Daily login streak' },
   streak_milestone: { points: 25, daily_cap: null, description: 'Hitting a streak milestone' },
+  // Placeholder prize values until the approved points table is in; all three are logged as kind 'challenge'.
+  challenge_place_1: { points: 50, daily_cap: null, description: 'First place in a judged challenge' },
+  challenge_place_2: { points: 30, daily_cap: null, description: 'Second place in a judged challenge' },
+  challenge_place_3: { points: 20, daily_cap: null, description: 'Third place in a judged challenge' },
 } as const;
 
 export type RuleKey = keyof typeof RULES;
+/** The points_log kind a rule is recorded under (most rules have a kind of the same name). */
+export const kindOf = (key: RuleKey): PointsKind => (key.startsWith('challenge_') ? 'challenge' : (key as PointsKind));
 export const isRuleKey = (k: string): k is RuleKey => Object.prototype.hasOwnProperty.call(RULES, k);
 
 /** Unknown keys throw, so a typo in a call site fails in tests instead of silently awarding nothing. */
@@ -53,12 +59,12 @@ export const awardRuleTx = async (
   if (amount <= 0) return 0;
   if (rule.daily_cap !== null) {
     const earned = await tx.pointsLog.aggregate({
-      where: { user_id: userId, kind: key, points: { gt: 0 }, created_at: { gte: startOfUtcDay() } },
+      where: { user_id: userId, kind: kindOf(key), points: { gt: 0 }, created_at: { gte: startOfUtcDay() } },
       _sum: { points: true },
     });
     amount = Math.min(amount, Math.max(0, toScaled(rule.daily_cap) - (earned._sum.points ?? 0)));
     if (amount === 0) return 0;
   }
-  await awardPointsTx(tx, userId, key, fromScaled(amount), reason, reference_id);
+  await awardPointsTx(tx, userId, kindOf(key), fromScaled(amount), reason, reference_id);
   return fromScaled(amount);
 };
