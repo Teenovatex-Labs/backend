@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { currentWindow, getMyApplication, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
+import { currentWindow, getMyApplication, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
 import { requireApplicant } from '../middleware/applicant.js';
 import { authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import { reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
+import { clarificationReplySchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
 
 const router = Router();
 
@@ -16,5 +16,6 @@ router.get('/me', authLimiter, requireApplicant, getMyApplication);
 router.patch('/draft', requireApplicant, validate(updateDraftSchema), updateDraft);
 router.post('/submit', requireApplicant, submitApplication);
 router.post('/withdraw', requireApplicant, withdrawApplication);
+router.post('/clarifications/:id/reply', requireApplicant, validate(clarificationReplySchema), replyToClarification);
 
 export default router;

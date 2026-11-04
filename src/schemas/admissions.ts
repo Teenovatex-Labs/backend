@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isValidBirthDate } from '../lib/age.js';
+import { CRITERIA } from '../lib/rubric.js';
 
 const phone = z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/, 'Enter a valid WhatsApp number');
 const text = (max: number, label: string) => z.string().trim().min(1, `${label} is required`).max(max);
@@ -50,3 +51,27 @@ export const createCohortSchema = z.object({
 });
 
 export const updateCohortSchema = createCohortSchema.partial().refine((v) => Object.keys(v).length > 0, 'Nothing to update');
+
+
+const rating = z.number().int().min(1).max(5);
+export const reviewSchema = z.object({
+  scores: z.object(Object.fromEntries(CRITERIA.map((c) => [c, rating])) as Record<(typeof CRITERIA)[number], typeof rating>),
+  recommendation: z.enum(['accept', 'decline', 'waitlist', 'shortlist']),
+  note: z.string().trim().max(4000).nullable().optional(),
+});
+
+export const decisionSchema = z.object({
+  decision: z.enum(['accept', 'decline', 'waitlist', 'shortlist']),
+  note: z.string().trim().max(4000).nullable().optional(),
+  feedback: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const reverseSchema = z.object({
+  decision: z.enum(['accept', 'decline', 'waitlist', 'shortlist']),
+  reason: z.string().trim().min(10, 'Give a reason of at least a sentence').max(2000),
+});
+
+export const secondReviewSchema = z.object({ reviewer_id: z.string().uuid() });
+export const clarificationSchema = z.object({ question: z.string().trim().min(5).max(1500) });
+export const clarificationReplySchema = z.object({ response: z.string().trim().min(1).max(4000) });
+export const releaseSchema = z.object({ allow_undecided: z.boolean().optional() });

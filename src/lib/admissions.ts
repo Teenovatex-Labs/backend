@@ -46,3 +46,11 @@ export const publicStatus = (app: Pick<Application, 'status' | 'published_at'>, 
   if (app.status === 'shortlisted') return 'under_review';
   return app.status;
 };
+
+export const INVITE_DAYS = 14;
+
+/** A single-use invitation token. Only its hash is stored. */
+export const newInvitation = () => {
+  const token = crypto.randomBytes(32).toString('hex');
+  return { token, hash: hashToken(token), expires: new Date(Date.now() + INVITE_DAYS * 86_400_000) };
+};

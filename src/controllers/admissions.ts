@@ -113,6 +113,7 @@ const view = async (app: Application) => {
     interests: app.interests, skill_level: app.skill_level, skill_level_note: app.skill_level_note,
     current_skills: app.current_skills, learning_goals: app.learning_goals,
     portfolio_url: app.portfolio_url, github_url: app.github_url, linkedin_url: app.linkedin_url,
+    clarifications: (await prisma.applicationClarification.findMany({ where: { application_id: app.id }, orderBy: { created_at: 'asc' } })).map((c) => ({ id: c.id, question: c.question, response: c.response, status: c.status, due_at: c.due_at.toISOString() })),
     submitted_at: app.submitted_at?.toISOString() ?? null,
     editable: app.status === 'draft' || (app.status === 'submitted' && !app.locked_at),
     window: { ...pub(window), state: windowState(window) },
@@ -176,4 +177,15 @@ export const withdrawApplication = async (req: ApplicantRequest, res: Response):
     data: { status: 'withdrawn', withdrawn_at: new Date(), retention_delete_at: new Date(Date.now() + RETENTION_MS) },
   });
   res.json({ ...(await view(updated)), message: 'Withdrawn. You can apply again in the next window.' });
+};
+
+export const replyToClarification = async (req: ApplicantRequest, res: Response): Promise<void> => {
+  const app = req.application!;
+  const c = await prisma.applicationClarification.findFirst({ where: { id: String(req.params.id), application_id: app.id } });
+  if (!c) throw new HttpError(404, 'NOT_FOUND', 'Question not found');
+  if (c.status !== 'open') throw new HttpError(409, 'ALREADY_ANSWERED', 'This question was already answered');
+  if (c.due_at < new Date()) throw new HttpError(409, 'CLARIFICATION_EXPIRED', 'The time to answer this question has passed');
+  const { response } = req.body as { response: string };
+  await prisma.applicationClarification.update({ where: { id: c.id }, data: { response, responded_at: new Date(), status: 'answered' } });
+  res.json({ message: 'Thanks, your reply was sent to the reviewer.' });
 };
