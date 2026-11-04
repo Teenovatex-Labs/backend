@@ -57,6 +57,12 @@ const buildSchema = (isProduction: boolean) => {
       PET_AI_ENABLED: z.string().default('true'),
       // Comma-separated emails that become admin automatically once they have verified the address.
       ADMIN_EMAILS: z.string().optional(),
+      // "true" closes open sign-up: a new account then needs an invitation. Off by default so
+      // deploying the code does not lock anyone out before the first intake has run.
+      REQUIRE_INVITATION: z.string().default('false'),
+      // Applicants younger than this need a parent or guardian to confirm after acceptance.
+      // A setting because the right age depends on the law where the member lives; counsel decides.
+      GUARDIAN_AGE_BELOW: z.coerce.number().int().min(13).max(21).default(16),
     })
     .refine((c) => c.JWT_SECRET !== c.JWT_REFRESH_SECRET, {
       message: 'JWT_SECRET and JWT_REFRESH_SECRET must be different',
@@ -86,6 +92,8 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     resend: { apiKey: c.RESEND_API_KEY, from: c.RESEND_FROM },
     contactTo: c.CONTACT_TO,
     adminEmails: splitKeys(c.ADMIN_EMAILS).map((e) => e.toLowerCase()),
+    requireInvitation: c.REQUIRE_INVITATION === 'true',
+    guardianAgeBelow: c.GUARDIAN_AGE_BELOW,
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
       dailyLimit: c.PET_DAILY_LIMIT,

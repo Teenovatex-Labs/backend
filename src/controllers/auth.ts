@@ -27,8 +27,17 @@ import {
   MAX_VERIFICATION_ATTEMPTS,
 } from '../lib/verification.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
+import { checkInvitation, consumeInvitation, gateIsOn, inviteMessage, onboardingStart } from '../lib/invitations.js';
 
 const googleClient = new OAuth2Client(config.googleClientId);
+
+class InviteTaken extends Error {}
+/** Another sign-up used the same link a moment earlier. Answers the request and yields undefined. */
+const inviteTakenTo409 = (res: Response) => (err: unknown) => {
+  if (!(err instanceof InviteTaken)) throw err;
+  res.status(409).json({ error: inviteMessage.INVITE_USED, code: 'INVITE_USED' });
+  return undefined;
+};
 
 const issueAndSendVerificationCode = async (userId: string, email: string): Promise<void> => {
   const code = generateVerificationCode();
@@ -44,7 +53,8 @@ const issueAndSendVerificationCode = async (userId: string, email: string): Prom
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { full_name, username, email, password, birth_date, timezone } = req.body as {
+  const { full_name, username, email, password, birth_date, timezone, invite_token } = req.body as {
+    invite_token?: string;
     full_name: string;
     username: string;
     email: string;
@@ -80,6 +90,16 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
+  // Membership is by invitation once the gate is on. A link is checked whenever one is sent, so a
+  // bad link is never silently ignored. Nothing is consumed until the account is written.
+  const gated = gateIsOn() || !!invite_token;
+  const invitation = gated ? await checkInvitation(invite_token, email, existingByEmail?.id) : null;
+  if (invitation?.problem) {
+    res.status(invitation.problem === 'INVITE_REQUIRED' ? 403 : 400).json({ error: inviteMessage[invitation.problem], code: invitation.problem });
+    return;
+  }
+  const invite = invitation?.invite ?? null;
+
   // An unverified row from an earlier, abandoned signup attempt — refresh
   // it and resend the code rather than blocking the retry as a duplicate.
   if (existingByEmail) {
@@ -92,10 +112,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     const password_hash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.update({
-      where: { id: existingByEmail.id },
-      data: { full_name, username, password_hash, birth_date: toDbDate(birth_date), timezone },
-    });
+    const user = await prisma.$transaction(async (tx) => {
+      if (invite && !(await consumeInvitation(tx, invite.id, existingByEmail.id, invite.used_by === existingByEmail.id))) throw new InviteTaken();
+      return tx.user.update({
+        where: { id: existingByEmail.id },
+        data: { full_name, username, password_hash, birth_date: toDbDate(birth_date), timezone, ...(invite && onboardingStart()) },
+      });
+    }).catch(inviteTakenTo409(res));
+    if (!user) return;
     await issueAndSendVerificationCode(user.id, user.email);
 
     res.status(201).json({
@@ -113,9 +137,17 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   }
 
   const password_hash = await bcrypt.hash(password, 12);
-  const user = await prisma.user.create({
-    data: { full_name, username, email, password_hash, birth_date: toDbDate(birth_date), timezone, settings: { create: {} } },
-  });
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: { full_name, username, email, password_hash, birth_date: toDbDate(birth_date), timezone, settings: { create: {} }, ...(invite && onboardingStart()) },
+    });
+    if (invite) {
+      if (!(await consumeInvitation(tx, invite.id, created.id, false))) throw new InviteTaken();
+      await tx.membershipEvent.create({ data: { user_id: created.id, to_status: 'onboarding', reason: 'Joined with an invitation' } });
+    }
+    return created;
+  }).catch(inviteTakenTo409(res));
+  if (!user) return;
   await issueAndSendVerificationCode(user.id, user.email);
 
   res.status(201).json({
@@ -379,7 +411,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
 };
 
 export const googleAuth = async (req: Request, res: Response): Promise<void> => {
-  const { id_token } = req.body as { id_token: string };
+  const { id_token, invite_token } = req.body as { id_token: string; invite_token?: string };
 
   if (!config.googleClientId) {
     res.status(500).json({ error: 'Google sign-in is not configured', code: 'GOOGLE_NOT_CONFIGURED' });
@@ -442,20 +474,42 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
         },
       });
     } else {
+      // A brand-new account: invitation-only once the gate is on. Google has proven the address,
+      // so the invitation must have been sent to that same address.
+      const invitation = googleVerifiedEmail && (gateIsOn() || invite_token) ? await checkInvitation(invite_token, payload.email) : null;
+      if (gateIsOn() && !googleVerifiedEmail) {
+        res.status(403).json({ error: inviteMessage.INVITE_REQUIRED, code: 'INVITE_REQUIRED' });
+        return;
+      }
+      if (invitation?.problem) {
+        res.status(invitation.problem === 'INVITE_REQUIRED' ? 403 : 400).json({ error: inviteMessage[invitation.problem], code: invitation.problem });
+        return;
+      }
+      const invite = invitation?.invite ?? null;
       // Placeholder only: the member is made to pick a real username before entering the app.
       const username = `user_${crypto.randomBytes(5).toString('hex')}`;
-      user = await prisma.user.create({
-        data: {
-          full_name: payload.name ?? payload.email,
-          username,
-          username_set: false,
-          email: payload.email,
-          google_id: payload.sub,
-          avatar_url: payload.picture ?? null,
-          email_verified: true,
-          settings: { create: {} },
-        },
-      });
+      const created = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.create({
+          data: {
+            full_name: payload.name ?? payload.email!,
+            username,
+            username_set: false,
+            email: payload.email!,
+            google_id: payload.sub,
+            avatar_url: payload.picture ?? null,
+            email_verified: true,
+            settings: { create: {} },
+            ...(invite && onboardingStart()),
+          },
+        });
+        if (invite) {
+          if (!(await consumeInvitation(tx, invite.id, u.id, false))) throw new InviteTaken();
+          await tx.membershipEvent.create({ data: { user_id: u.id, to_status: 'onboarding', reason: 'Joined with an invitation' } });
+        }
+        return u;
+      }).catch(inviteTakenTo409(res));
+      if (!created) return;
+      user = created;
     }
   }
 

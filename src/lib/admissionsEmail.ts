@@ -126,3 +126,22 @@ export const sendClarificationRequest = (email: string, days: number) =>
     'Clarification',
     email
   );
+
+export const sendGuardianRequest = (parentEmail: string, childFirstName: string, token: string, days: number) => {
+  const link = `${APP_URL}/guardian/${token}`;
+  return send(
+    parentEmail,
+    `${childFirstName} would like your OK to join TeenovateX`,
+    renderEmailShell({
+      preheader: 'A parent or guardian confirmation is needed.',
+      eyebrow: 'Parent or guardian',
+      heading: 'Your OK is needed.',
+      bodyHtml: `<p style="margin:0 0 12px;">${childFirstName} applied to TeenovateX, a community where young people learn and build real projects, and has been accepted. Because they are under ${config.guardianAgeBelow}, we need a parent or guardian to read how we look after members and confirm. The link works for ${days} days. If you do not recognise this, ignore this email and nothing will happen.</p>`,
+      ctaLabel: 'Read and confirm',
+      ctaHref: link,
+      footerNote: 'You can withdraw your confirmation at any time from the same link.',
+    }),
+    'Guardian request',
+    link
+  );
+};

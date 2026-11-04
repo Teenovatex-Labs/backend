@@ -13,6 +13,7 @@ import {
   windowState,
 } from '../lib/admissions.js';
 import { sendApplicationLink, sendApplicationReceived } from '../lib/admissionsEmail.js';
+import { needsGuardian } from '../lib/guardian.js';
 import { createNotification } from '../lib/notify.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
 
@@ -103,7 +104,10 @@ export const startApplication = async (req: Request, res: Response): Promise<voi
 
 const view = async (app: Application) => {
   const window = await prisma.applicationWindow.findUniqueOrThrow({ where: { id: app.window_id } });
+  const status = publicStatus(app, window);
+  const consent = status === 'accepted' && needsGuardian(app.birth_date) ? await prisma.guardianConsent.findUnique({ where: { application_id: app.id } }) : null;
   return {
+    guardian: status === 'accepted' ? { required: needsGuardian(app.birth_date), status: consent ? (consent.status === 'pending' && consent.expires_at <= new Date() ? 'expired' : consent.status) : 'not_requested' } : null,
     reference: app.reference,
     status: publicStatus(app, window),
     email: app.email,

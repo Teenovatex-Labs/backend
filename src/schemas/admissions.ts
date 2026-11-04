@@ -75,3 +75,5 @@ export const secondReviewSchema = z.object({ reviewer_id: z.string().uuid() });
 export const clarificationSchema = z.object({ question: z.string().trim().min(5).max(1500) });
 export const clarificationReplySchema = z.object({ response: z.string().trim().min(1).max(4000) });
 export const releaseSchema = z.object({ allow_undecided: z.boolean().optional() });
+
+export const guardianSchema = z.object({ parent_email: z.string().trim().toLowerCase().email().max(200) });
