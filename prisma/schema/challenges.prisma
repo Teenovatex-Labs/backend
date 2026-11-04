@@ -39,7 +39,7 @@ model Challenge {
   created_at           DateTime        @default(now())
   updated_at           DateTime        @updatedAt
 
-  badge   BadgeDefinition? @relation(fields: [badge_id], references: [id])
+  badge   BadgeDefinition?  @relation(fields: [badge_id], references: [id])
   entries ChallengeEntry[]
   results ChallengeResult[]
   awards  BadgeAward[]
@@ -60,8 +60,8 @@ model ChallengeEntry {
   submitted_at DateTime             @default(now())
   updated_at   DateTime             @updatedAt
 
-  challenge Challenge          @relation(fields: [challenge_id], references: [id], onDelete: Cascade)
-  user      User               @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  challenge Challenge         @relation(fields: [challenge_id], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
   scores    ChallengeScore[]
   results   ChallengeResult[]
 

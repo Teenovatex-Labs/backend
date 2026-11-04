@@ -4,10 +4,13 @@ model Conversation {
   pair_key   String?  @unique
   // Set for a lab team's shared chat (and then pair_key is empty); one chat per lab.
   lab_id     String?  @unique
+  // Set for a curated pairing's thread (and then pair_key and lab_id are empty).
+  pairing_id String?  @unique
   created_at DateTime @default(now())
   updated_at DateTime @default(now())
 
   lab      Project?             @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+  pairing  Pairing?             @relation(fields: [pairing_id], references: [id], onDelete: Cascade)
   members  ConversationMember[]
   messages Message[]
 

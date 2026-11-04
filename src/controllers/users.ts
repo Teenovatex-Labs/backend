@@ -44,6 +44,8 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       suspended_reason: true,
       timezone: true,
       role: true,
+      interests: true,
+      skills: true,
     },
   });
   if (!user) { res.status(404).json({ error: 'User not found', code: 'NOT_FOUND' }); return; }
@@ -72,10 +74,12 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
     bio?: string;
     social_links?: Record<string, string>;
     timezone?: string;
+    interests?: string[];
+    skills?: string[];
   };
 
   // A bio is public, so it gets the same check as a post. Social links are separate fields on purpose.
-  await assertClean(req.userId!, [body.full_name, body.bio], { allowLinks: true });
+  await assertClean(req.userId!, [body.full_name, body.bio, ...(body.interests ?? []), ...(body.skills ?? [])], { allowLinks: true });
 
   const updated = await prisma.user.update({
     where: { id: req.userId },
@@ -84,8 +88,10 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
       ...(body.bio !== undefined && { bio: body.bio }),
       ...(body.social_links !== undefined && { social_links: body.social_links }),
       ...(body.timezone !== undefined && { timezone: body.timezone }),
+      ...(body.interests !== undefined && { interests: body.interests }),
+      ...(body.skills !== undefined && { skills: body.skills }),
     },
-    select: publicSelect,
+    select: { ...publicSelect, interests: true, skills: true },
   });
 
   res.json({ ...updated, points: fromScaled(updated.points) });
