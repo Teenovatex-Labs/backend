@@ -1,0 +1,45 @@
+model Conversation {
+  id         String   @id @default(uuid())
+  // The two member ids, sorted and joined, so a pair can only ever have one conversation.
+  pair_key   String?  @unique
+  // Set for a lab team's shared chat (and then pair_key is empty); one chat per lab.
+  lab_id     String?  @unique
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now())
+
+  lab      Project?             @relation(fields: [lab_id], references: [id], onDelete: Cascade)
+  members  ConversationMember[]
+  messages Message[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  conversation_id String
+  user_id         String
+  last_read_at    DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([conversation_id, user_id])
+  @@index([user_id])
+  @@map("conversation_members")
+}
+
+model Message {
+  id              String   @id @default(uuid())
+  conversation_id String
+  sender_id       String
+  body            String
+  created_at      DateTime @default(now())
+  // Hidden by the sender (unsend) or by a moderator. Kept for the audit trail, never shown to members.
+  hidden          Boolean  @default(false)
+
+  conversation Conversation       @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  sender       User               @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+  attachment   MessageAttachment?
+
+  @@index([conversation_id, created_at])
+  @@map("messages")
+}

@@ -1,0 +1,59 @@
+// Why points were given or taken. The `reason` text is for people; this is for code.
+enum PointsKind {
+  vote_received
+  vote_removed
+  lesson
+  streak
+  streak_milestone
+  post_tagged
+  quest
+  other
+}
+
+model PointsLog {
+  id           String     @id @default(uuid())
+  user_id      String
+  points       Int
+  reason       String
+  kind         PointsKind @default(other)
+  reference_id String?
+  created_at   DateTime   @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("points_log")
+}
+
+model UserBadge {
+  user_id    String
+  key        String
+  awarded_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, key])
+  @@map("user_badges")
+}
+
+// One quest reward per member per (their own) day.
+model QuestClaim {
+  user_id    String
+  day        DateTime @db.Date
+  key        String
+  claimed_at DateTime @default(now())
+
+  @@id([user_id, day])
+  @@map("quest_claims")
+}
+
+// One reward taken from a week's challenges (or the all-three bonus, key "bonus"). The key makes a
+// double claim impossible.
+model WeeklyClaim {
+  user_id    String
+  week       DateTime @db.Date // the Monday that starts the member's week
+  key        String
+  claimed_at DateTime @default(now())
+
+  @@id([user_id, week, key])
+  @@map("weekly_claims")
+}
