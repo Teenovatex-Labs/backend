@@ -14,7 +14,7 @@ describe('daily streak', () => {
   it('starts at 1 on the first visit and pays 3 points', async () => {
     const { user } = await makeUser();
     expect(await recordDailyLogin(user, at('2026-03-10T09:00:00Z'))).toBe(1);
-    expect((await reload(user.id)).points).toBe(3);
+    expect((await reload(user.id)).points).toBe(300);
   });
 
   it('does nothing on a second visit the same day', async () => {
@@ -22,7 +22,7 @@ describe('daily streak', () => {
     await recordDailyLogin(user, at('2026-03-10T09:00:00Z'));
     const again = await recordDailyLogin(await reload(user.id), at('2026-03-10T20:00:00Z'));
     expect(again).toBe(1);
-    expect((await reload(user.id)).points).toBe(3);
+    expect((await reload(user.id)).points).toBe(300);
   });
 
   it('grows on the next day and resets after a missed day', async () => {
@@ -42,6 +42,6 @@ describe('daily streak', () => {
   it('adds a 25 point bonus every 7th day', async () => {
     const { user } = await makeUser({ streak: 6, last_login_at: at('2026-03-10T09:00:00Z') });
     expect(await recordDailyLogin(user, at('2026-03-11T09:00:00Z'))).toBe(7);
-    expect((await reload(user.id)).points).toBe(28);
+    expect((await reload(user.id)).points).toBe(2800);
   });
 });

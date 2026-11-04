@@ -27,7 +27,7 @@ describe('levels', () => {
   });
 
   it('are shown on the member and on their public profile', async () => {
-    const me = await makeUser({ points: 130 });
+    const me = await makeUser({ points: 13000 });
     expect((await request(app).get('/api/v1/users/me').set(me.auth)).body.level).toMatchObject({ level: 4, title: 'Builder' });
     expect((await request(app).get(`/api/v1/users/${me.user.username}`)).body.level.title).toBe('Builder');
   });
@@ -122,7 +122,7 @@ describe('the daily quest', () => {
     expect(done.body).toMatchObject({ complete: true, progress: q.goal });
     const claim = await request(app).post('/api/v1/rewards/quest/claim').set(me.auth);
     expect(claim.body).toEqual({ claimed: true, points_awarded: 5 });
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(5);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(500);
     expect((await prisma.pointsLog.findFirstOrThrow({ where: { user_id: me.user.id } })).kind).toBe('quest');
     expect((await request(app).post('/api/v1/rewards/quest/claim').set(me.auth)).body.code).toBe('ALREADY_CLAIMED');
   });
@@ -146,7 +146,7 @@ describe('the daily quest', () => {
 
     const results = await Promise.all([1, 2, 3, 4].map(() => request(app).post('/api/v1/rewards/quest/claim').set(me.auth)));
     expect(results.filter((r) => r.status === 200)).toHaveLength(1);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(5);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: me.user.id } })).points).toBe(500);
   });
 });
 

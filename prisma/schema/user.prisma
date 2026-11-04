@@ -17,6 +17,7 @@ model User {
   avatar_url    String?
   bio           String?
   social_links  Json?
+  // Hundredths of a point in the CURRENT season (150 = 1.5). See src/lib/pointsMath.ts.
   points        Int       @default(0)
   streak        Int       @default(0)
   last_login_at DateTime?
@@ -83,6 +84,7 @@ model User {
   onboarding_due_at   DateTime?
   onboarding_progress OnboardingProgress[]
   badge_awards        BadgeAward[]
+  season_totals       SeasonTotal[]
 
   @@map("users")
 }

@@ -33,6 +33,7 @@ import contactRouter from './routes/contact.js';
 import admissionsRouter from './routes/admissions.js';
 import { adminOnboardingRouter, onboardingRouter } from './routes/onboarding.js';
 import { adminBadgeAwardsRouter, adminBadgesRouter, badgesRouter } from './routes/badges.js';
+import seasonsRouter from './routes/seasons.js';
 import adminCohortsRouter from './routes/adminCohorts.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
 
@@ -70,6 +71,7 @@ app.use(`${v1}/learn`, learnRouter);
 app.use(`${v1}/reports`, reportsRouter);
 app.use(`${v1}/blocks`, blocksRouter);
 app.use(`${v1}/admin/cohorts`, adminCohortsRouter);
+app.use(`${v1}/admin/seasons`, seasonsRouter);
 app.use(`${v1}/admin/badges`, adminBadgesRouter);
 app.use(`${v1}/admin/badge-awards`, adminBadgeAwardsRouter);
 app.use(`${v1}/badges`, badgesRouter);

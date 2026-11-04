@@ -6,6 +6,7 @@ import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 import { createNotification } from '../lib/notify.js';
 import { assertClean } from '../lib/guard.js';
 import { levelFor } from '../lib/levels.js';
+import { fromScaled } from '../lib/pointsMath.js';
 import { BADGES, checkBadgesQuietly } from '../lib/badges.js';
 import { honorsFor } from './badges.js';
 import { permissionsFor } from '../lib/permissions.js';
@@ -59,7 +60,8 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
     has_password: !!password_hash,
     has_google: !!google_id,
     permissions: permissionsFor(user.role),
-    level: levelFor(user.points),
+    points: fromScaled(user.points),
+    level: levelFor(fromScaled(user.points)),
     rank: await getRank(user.points),
   });
 };
@@ -86,7 +88,7 @@ export const updateMe = async (req: AuthRequest, res: Response): Promise<void> =
     select: publicSelect,
   });
 
-  res.json(updated);
+  res.json({ ...updated, points: fromScaled(updated.points) });
 };
 
 export const uploadAvatar = async (
@@ -127,7 +129,8 @@ export const getUserByUsername = async (req: AuthRequest, res: Response): Promis
   res.json({
     ...rest,
     private: false,
-    level: levelFor(user.points),
+    points: fromScaled(user.points),
+    level: levelFor(fromScaled(user.points)),
     badges: (await prisma.userBadge.findMany({ where: { user_id: user.id }, orderBy: { awarded_at: 'asc' } })).flatMap((b) => {
       const def = BADGES.find((d) => d.key === b.key);
       return def ? [{ key: def.key, title: def.title, description: def.description, symbol: def.symbol, awarded_at: b.awarded_at }] : [];

@@ -1,3 +1,4 @@
+import { fromScaled } from '../lib/pointsMath.js';
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
@@ -57,7 +58,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
   res.json({
     q,
     labs,
-    people: people.map((p) => ({ username: p.username, full_name: p.full_name, avatar_url: p.avatar_url, points: p.points })),
+    people: people.map((p) => ({ username: p.username, full_name: p.full_name, avatar_url: p.avatar_url, points: fromScaled(p.points) })),
     posts: posts.map((p) => ({ id: p.id, title: p.title, excerpt: p.body.slice(0, 140), created_at: p.created_at, space: p.space, author: p.author.username })),
     lessons,
     events,

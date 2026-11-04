@@ -1,3 +1,4 @@
+import { fromScaled } from '../lib/pointsMath.js';
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { config } from '../config.js';
@@ -153,7 +154,7 @@ async function buildContext(userId: string): Promise<string> {
     }),
     prisma.eventRsvp.findFirst({ where: { user_id: userId, event: { starts_at: { gt: now } } }, orderBy: { event: { starts_at: 'asc' } }, include: { event: { select: { title: true, starts_at: true } } } }),
   ]);
-  const lines = [`points: ${me?.points ?? 0}, day streak: ${me?.streak ?? 0}, unread notifications: ${unread}`];
+  const lines = [`points: ${fromScaled(me?.points ?? 0)}, day streak: ${me?.streak ?? 0}, unread notifications: ${unread}`];
   if (task?.due_at) lines.push(`next task due: "${task.title}" in ${task.lab.name}, ${task.due_at.toISOString().slice(0, 16)}Z`);
   if (event) lines.push(`next event they're going to: "${event.event.title}", ${event.event.starts_at.toISOString().slice(0, 16)}Z`);
   return lines.join('\n');

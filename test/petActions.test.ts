@@ -40,7 +40,7 @@ describe('What Alfred did', () => {
     const me = await makeUser();
     const lab = await makeProject(owner.user.id);
     await request(app).post(`/api/v1/projects/${lab.id}/vote`).set(me.auth);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).points).toBe(10);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).points).toBe(1000);
     const { body } = await log(me.auth, { kind: 'vote', summary: 'Voted', payload: { lab_id: lab.id } });
     expect((await undo(me.auth, body.id)).status).toBe(200);
     expect(await prisma.vote.count()).toBe(0);
