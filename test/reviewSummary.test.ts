@@ -71,6 +71,6 @@ describe('reviewer summary', () => {
   it('accepts only plain neutral bullets', () => {
     expect(acceptSummary(GOOD)).toBe(GOOD);
     expect(acceptSummary('One paragraph that is long enough to pass the length check but is not bullet points at all.')).toBeNull();
-    expect(buildInput({ interests: [], skill_level: null, current_skills: null, learning_goals: null, answers: [] })).toContain('none given');
+    expect(buildInput({ interests: [], skill_level: null, current_skills: [], learning_goals: [], answers: [] })).toContain('none given');
   });
 });
