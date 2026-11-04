@@ -1,0 +1,52 @@
+import { z } from 'zod';
+import { isValidBirthDate } from '../lib/age.js';
+
+const phone = z.string().trim().regex(/^\+?[0-9 ()-]{7,20}$/, 'Enter a valid WhatsApp number');
+const text = (max: number, label: string) => z.string().trim().min(1, `${label} is required`).max(max);
+const optionalUrl = z.string().trim().url('Enter a full link starting with https://').max(300).nullable().optional();
+const list = z.array(z.string().trim().min(1).max(60)).max(16);
+
+export const startApplicationSchema = z.object({
+  email: z.string().trim().toLowerCase().email().max(200),
+  full_name: text(120, 'Full name'),
+  birth_date: z.string().refine((v) => isValidBirthDate(v), 'Enter a real date of birth'),
+  country: text(80, 'Country'),
+  city: text(80, 'State or city'),
+  whatsapp: phone,
+  school: z.string().trim().max(160).nullable().optional(),
+  education_level: text(60, 'Education level'),
+});
+
+export const updateDraftSchema = z
+  .object({
+    full_name: text(120, 'Full name'),
+    birth_date: z.string().refine((v) => isValidBirthDate(v), 'Enter a real date of birth'),
+    country: text(80, 'Country'),
+    city: text(80, 'State or city'),
+    whatsapp: phone,
+    school: z.string().trim().max(160).nullable(),
+    education_level: text(60, 'Education level'),
+    interests: list,
+    skill_level: z.enum(['beginner', 'intermediate', 'advanced']).nullable(),
+    skill_level_note: z.string().trim().max(600).nullable(),
+    current_skills: list,
+    learning_goals: list,
+    portfolio_url: optionalUrl,
+    github_url: optionalUrl,
+    linkedin_url: optionalUrl,
+  })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update');
+
+export const resumeSchema = z.object({ token: z.string().min(32).max(200) });
+export const reminderSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
+
+export const createCohortSchema = z.object({
+  opens_at: z.coerce.date(),
+  closes_at: z.coerce.date(),
+  decisions_publish_at: z.coerce.date(),
+  target_size: z.number().int().min(1).max(10000).nullable().optional(),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+
+export const updateCohortSchema = createCohortSchema.partial().refine((v) => Object.keys(v).length > 0, 'Nothing to update');
