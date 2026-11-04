@@ -44,6 +44,6 @@ describe('point rules', () => {
     expect((await patch({ reset: true })).body.points).toBe(5);
     expect((await resolveRule(prisma, 'lesson')).customised).toBe(false);
     const list = await request(app).get('/api/v1/admin/point-rules').set(admin.auth);
-    expect(list.body.items).toHaveLength(5);
+    expect(list.body.items).toHaveLength(8);
   });
 });

@@ -35,6 +35,7 @@ import { adminOnboardingRouter, onboardingRouter } from './routes/onboarding.js'
 import { adminBadgeAwardsRouter, adminBadgesRouter, badgesRouter } from './routes/badges.js';
 import seasonsRouter from './routes/seasons.js';
 import pointRulesRouter from './routes/pointRules.js';
+import { adminChallengesRouter, challengesRouter } from './routes/challenges.js';
 import adminCohortsRouter from './routes/adminCohorts.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
 
@@ -74,6 +75,8 @@ app.use(`${v1}/blocks`, blocksRouter);
 app.use(`${v1}/admin/cohorts`, adminCohortsRouter);
 app.use(`${v1}/admin/seasons`, seasonsRouter);
 app.use(`${v1}/admin/point-rules`, pointRulesRouter);
+app.use(`${v1}/admin/challenges`, adminChallengesRouter);
+app.use(`${v1}/challenges`, challengesRouter);
 app.use(`${v1}/admin/badges`, adminBadgesRouter);
 app.use(`${v1}/admin/badge-awards`, adminBadgeAwardsRouter);
 app.use(`${v1}/badges`, badgesRouter);

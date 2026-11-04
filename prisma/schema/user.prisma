@@ -84,6 +84,7 @@ model User {
   onboarding_due_at   DateTime?
   onboarding_progress OnboardingProgress[]
   badge_awards        BadgeAward[]
+  challenge_entries   ChallengeEntry[]
   season_totals       SeasonTotal[]
 
   @@map("users")

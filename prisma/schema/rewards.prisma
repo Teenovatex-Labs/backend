@@ -7,6 +7,7 @@ enum PointsKind {
   streak_milestone
   post_tagged
   quest
+  challenge
   other
 }
 
@@ -96,7 +97,8 @@ model BadgeDefinition {
   created_at    DateTime        @default(now())
   updated_at    DateTime        @updatedAt
 
-  awards BadgeAward[]
+  awards     BadgeAward[]
+  challenges Challenge[]
 
   @@map("badge_definitions")
 }
@@ -115,8 +117,9 @@ model BadgeAward {
   revoke_reason String?
   featured      Boolean   @default(false)
 
-  user  User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  badge BadgeDefinition @relation(fields: [badge_id], references: [id])
+  user      User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  badge     BadgeDefinition @relation(fields: [badge_id], references: [id])
+  challenge Challenge?      @relation(fields: [challenge_id], references: [id])
 
   @@index([user_id])
   @@index([badge_id])
