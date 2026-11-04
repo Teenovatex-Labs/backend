@@ -1,0 +1,55 @@
+import { prisma } from '../db.js';
+import { audit } from '../lib/audit.js';
+import { needsGuardian } from '../lib/guardian.js';
+
+// Applicant data is kept only as long as it is needed. Two things end it early or on schedule:
+//  - a declined application, 6 months after the decision (a reapplication resets the clock);
+//  - an accepted under-age applicant whose guardian never confirmed (or withdrew) and whose invitation is no longer usable.
+// Deletion removes the application, answers, attachments records, reviews and consent. The audit line keeps
+// only the reference and the reason, never anything the applicant wrote.
+// Not covered, because the policy is undefined: drafts that were never submitted.
+
+const deleteApplication = async (id: string, reference: string, reason: string) => {
+  await prisma.$transaction(async (tx) => {
+    await tx.invitation.deleteMany({ where: { application_id: id, used_at: null } });
+    await tx.application.delete({ where: { id } });
+    await audit(null, 'application.purge', { type: 'application', id }, { reference, reason }, tx);
+  });
+};
+
+export async function runRetention(now: Date = new Date()): Promise<{ declined: number; consent: number; expired_consents: number }> {
+  // A pending confirmation that ran out of time is marked as such, so the record says what happened.
+  const expired = await prisma.guardianConsent.updateMany({ where: { status: 'pending', expires_at: { lte: now } }, data: { status: 'expired' } });
+
+  let declined = 0;
+  const due = await prisma.application.findMany({ where: { status: 'declined', retention_delete_at: { lte: now } }, select: { id: true, reference: true } });
+  for (const a of due) {
+    await deleteApplication(a.id, a.reference, 'declined, retention period ended');
+    declined++;
+  }
+
+  let consent = 0;
+  const accepted = await prisma.application.findMany({
+    where: { status: 'accepted', published_at: { not: null }, invitations: { none: { used_at: { not: null } } } },
+    include: { consent: { select: { status: true } }, invitations: { select: { expires_at: true, revoked_at: true } } },
+  });
+  for (const a of accepted) {
+    if (!needsGuardian(a.birth_date) || a.consent?.status === 'confirmed') continue;
+    const usable = a.invitations.some((i) => !i.revoked_at && i.expires_at > now);
+    if (usable) continue;
+    await deleteApplication(a.id, a.reference, 'guardian confirmation not completed');
+    consent++;
+  }
+  return { declined, consent, expired_consents: expired.count };
+}
+
+/** Starts the hourly scan. Returns a stop function. */
+export function startRetention(intervalMs = 60 * 60_000): () => void {
+  const tick = () => runRetention().catch((err) => console.error('Retention scan failed:', err));
+  const first = setTimeout(tick, 30_000);
+  const timer = setInterval(tick, intervalMs);
+  return () => {
+    clearTimeout(first);
+    clearInterval(timer);
+  };
+}
