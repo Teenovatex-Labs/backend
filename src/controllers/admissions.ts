@@ -233,16 +233,17 @@ export const nextQuestion = async (req: ApplicantRequest, res: Response): Promis
   if (!(app.status === 'draft' || (app.status === 'submitted' && !app.locked_at))) throw new HttpError(409, 'APPLICATION_LOCKED', 'This application is being reviewed and can no longer be edited.');
   const q = await ensureNextQuestion(app);
   const state = await interviewState(app);
-  res.json({ ...state, next: q ? { position: q.position, question: q.question_text, format: q.format } : null });
+  res.json({ ...state, next: q ? { position: q.position, question: q.question_text, format: q.format, spec: (q.spec as object | null) ?? null } : null });
 };
 
 export const answerQuestion = async (req: ApplicantRequest, res: Response): Promise<void> => {
   const app = await carryForward(req.application!);
   if (!(app.status === 'draft' || (app.status === 'submitted' && !app.locked_at))) throw new HttpError(409, 'APPLICATION_LOCKED', 'This application is being reviewed and can no longer be edited.');
   const position = Number(req.params.position);
-  const { answer } = req.body as { answer: string };
-  if (answer.length > ANSWER_MAX) throw new HttpError(422, 'TOO_LONG', `Keep each answer under ${ANSWER_MAX} characters.`);
-  const result = await saveAnswer(app, position, answer);
+  const { answer, choice, value, note } = req.body as { answer?: string; choice?: string[]; value?: number; note?: string };
+  if ((answer ?? '').length > ANSWER_MAX) throw new HttpError(422, 'TOO_LONG', `Keep each answer under ${ANSWER_MAX} characters.`);
+  const result = await saveAnswer(app, position, { text: answer, choice, value, note });
   if (!result) throw new HttpError(404, 'NOT_FOUND', 'There is no such question.');
+  if ('invalid' in result) throw new HttpError(422, 'INVALID_ANSWER', result.invalid ?? 'That answer does not fit the question.');
   res.json({ saved: true, safety_message: result.safety, ...(await interviewState(app)) });
 };

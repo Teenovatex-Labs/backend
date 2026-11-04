@@ -5,6 +5,8 @@ import { HttpError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { ageOn } from '../lib/age.js';
 import { can } from '../lib/permissions.js';
+import { config } from '../config.js';
+import { gatherEvidence, suggestionsVisible } from '../lib/alfred/evidence.js';
 import { CRITERIA, CRITERION_GUIDE, INSUFFICIENT_EVIDENCE, RATING_GUIDE, RUBRIC, weightedScore, type Criterion, type Rating } from '../lib/rubric.js';
 import { RETENTION_MS } from '../lib/admissions.js';
 import { sendClarificationRequest } from '../lib/admissionsEmail.js';
@@ -67,6 +69,31 @@ export const summariseApplication = async (req: AuthRequest, res: Response): Pro
     throw new HttpError(result.reason === 'FAILED' ? 502 : 409, `SUMMARY_${result.reason}`, message);
   }
   res.json({ summary: result.summary, machine_written: true, notice: 'Machine-written reading aid. It does not recommend or score anyone. Check it against the answers.' });
+};
+
+/**
+ * Evidence organised by rubric criterion, with quotes checked against the real answers. Suggested 1-5 ratings are held back
+ * until this reviewer has saved their own review (configurable), so the machine's number cannot anchor theirs.
+ */
+export const evidenceForApplication = async (req: AuthRequest, res: Response): Promise<void> => {
+  const app = await find(String(req.params.id));
+  const answers = await prisma.applicationAnswer.findMany({ where: { application_id: app.id }, orderBy: { position: 'asc' } });
+  const result = await gatherEvidence({ ...app, answers });
+  await audit(req.userId!, 'application.evidence', { type: 'application', id: app.id }, { ok: result.ok, ...(result.ok ? { prompt_version: result.prompt_version } : { reason: result.reason }) });
+  if (!result.ok) {
+    const message = { DISABLED: 'Evidence summaries are switched off.', SENSITIVE: 'Read this application in full: something in it needs a person.', FAILED: 'Evidence could not be gathered. Please read the answers directly.' }[result.reason];
+    throw new HttpError(result.reason === 'FAILED' ? 502 : 409, `EVIDENCE_${result.reason}`, message);
+  }
+  const own = await prisma.applicationReview.findFirst({ where: { application_id: app.id, reviewer_id: req.userId!, submitted_at: { not: null } }, select: { id: true } });
+  const show = suggestionsVisible(config.suggestedRatings, own !== null);
+  const hasSuggestions = result.criteria.some((c) => c.suggested_rating !== null);
+  res.json({
+    criteria: result.criteria.map((c) => ({ ...c, suggested_rating: show ? c.suggested_rating : null })),
+    suggestions_visible: show,
+    suggestions_hidden_until_review: !show && config.suggestedRatings === 'after_review' && hasSuggestions,
+    machine_written: true,
+    notice: 'Machine-written reading aid. Quotes are checked against the answers. Any suggested rating is a starting point you can ignore: you rate, you decide.',
+  });
 };
 
 export const getApplication = async (req: AuthRequest, res: Response): Promise<void> => {

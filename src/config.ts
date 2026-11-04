@@ -60,6 +60,7 @@ const buildSchema = (isProduction: boolean) => {
       SAFEGUARDING_LEAD_EMAILS: z.string().optional(),
       ADMISSIONS_AI_ENABLED: z.string().default('true'),
       ADMISSIONS_SUMMARY_ENABLED: z.string().default('false'),
+      ADMISSIONS_SUGGESTED_RATINGS: z.enum(['after_review', 'always', 'off']).default('after_review'),
       PET_AI_ENABLED: z.string().default('true'),
       // Comma-separated emails that become admin automatically once they have verified the address.
       ADMIN_EMAILS: z.string().optional(),
@@ -108,6 +109,8 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     admissionsAiEnabled: c.ADMISSIONS_AI_ENABLED !== 'false',
     // Reviewer summaries are off until someone turns them on deliberately.
     admissionsSummaryEnabled: c.ADMISSIONS_SUMMARY_ENABLED === 'true',
+    // When a reviewer sees Alfred's suggested 1-5 ratings: only after saving their own, always, or never.
+    suggestedRatings: c.ADMISSIONS_SUGGESTED_RATINGS,
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
       dailyLimit: c.PET_DAILY_LIMIT,
