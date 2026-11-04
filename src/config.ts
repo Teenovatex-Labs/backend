@@ -62,6 +62,9 @@ const buildSchema = (isProduction: boolean) => {
       REQUIRE_INVITATION: z.string().default('false'),
       // Applicants younger than this need a parent or guardian to confirm after acceptance.
       // A setting because the right age depends on the law where the member lives; counsel decides.
+      // Where new members are sent during onboarding. Unset means that step shows no link.
+      ONBOARDING_WHATSAPP_URL: z.string().url().optional(),
+      ONBOARDING_HCB_URL: z.string().url().optional(),
       GUARDIAN_AGE_BELOW: z.coerce.number().int().min(13).max(21).default(16),
     })
     .refine((c) => c.JWT_SECRET !== c.JWT_REFRESH_SECRET, {
@@ -94,6 +97,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     adminEmails: splitKeys(c.ADMIN_EMAILS).map((e) => e.toLowerCase()),
     requireInvitation: c.REQUIRE_INVITATION === 'true',
     guardianAgeBelow: c.GUARDIAN_AGE_BELOW,
+    onboarding: { whatsappUrl: c.ONBOARDING_WHATSAPP_URL, hcbUrl: c.ONBOARDING_HCB_URL },
     pet: {
       enabled: c.PET_AI_ENABLED !== 'false',
       dailyLimit: c.PET_DAILY_LIMIT,
