@@ -1,6 +1,7 @@
 import type { Response } from 'express';
 import { prisma } from '../db.js';
 import { audit } from '../lib/audit.js';
+import { HttpError } from '../lib/errors.js';
 import { fromScaled } from '../lib/pointsMath.js';
 import { currentSeason } from '../lib/seasons.js';
 import type { AuthRequest } from '../middleware/auth.js';
@@ -40,4 +41,21 @@ export const startSeason = async (req: AuthRequest, res: Response): Promise<void
     return { ended: ending, next, archived: holders.length };
   });
   res.status(201).json({ ended: shape({ ...result.ended, is_current: false, ends_at: new Date() }), current: shape(result.next), archived_members: result.archived });
+};
+
+/** Members can browse past seasons; the same usernames, avatars and points the live leaderboard already shows. */
+export const publicSeasons = async (_req: AuthRequest, res: Response): Promise<void> => {
+  const seasons = await prisma.season.findMany({ orderBy: { number: 'desc' } });
+  res.json({ items: seasons.map(shape) });
+};
+
+export const publicSeasonLeaderboard = async (req: AuthRequest, res: Response): Promise<void> => {
+  const season = await prisma.season.findUnique({ where: { id: String(req.params.id) } });
+  if (!season) throw new HttpError(404, 'NOT_FOUND', 'Season not found');
+  if (season.is_current) throw new HttpError(409, 'SEASON_IN_PROGRESS', 'This season is still running; see the live leaderboard.');
+  const top = await prisma.seasonTotal.findMany({
+    where: { season_id: season.id }, orderBy: { points: 'desc' }, take: 50,
+    include: { user: { select: { username: true, avatar_url: true } } },
+  });
+  res.json({ season: shape(season), leaderboard: top.map((t, i) => ({ rank: i + 1, username: t.user.username, avatar_url: t.user.avatar_url, points: fromScaled(t.points) })) });
 };

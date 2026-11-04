@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { listSeasons, seasonTotals, startSeason } from '../controllers/seasons.js';
+import { listSeasons, publicSeasonLeaderboard, publicSeasons, seasonTotals, startSeason } from '../controllers/seasons.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
@@ -13,3 +13,9 @@ router.get('/:id/totals', seasonTotals);
 router.post('/start', validate(z.object({ confirm: z.literal(true), name: z.string().trim().min(2).max(60).optional() })), startSeason);
 
 export default router;
+
+/** Mounted at /seasons: read-only history for signed-in members. */
+export const publicSeasonsRouter = Router();
+publicSeasonsRouter.use(requireAuth);
+publicSeasonsRouter.get('/', publicSeasons);
+publicSeasonsRouter.get('/:id/leaderboard', publicSeasonLeaderboard);

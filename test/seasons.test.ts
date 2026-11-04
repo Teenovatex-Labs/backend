@@ -64,4 +64,23 @@ describe('points and seasons', () => {
     expect((await request(app).post('/api/v1/admin/seasons/start').set(mod.auth).send({ confirm: true })).status).toBe(403);
     expect(await prisma.season.count()).toBe(0);
   });
+
+  it('lets any member read a finished season leaderboard, but not the running one', async () => {
+    const admin = await makeUser({ role: 'admin' });
+    const a = await makeUser();
+    await awardPoints(a.user.id, 'other', 4, 'x');
+    const first = await currentSeason();
+    await request(app).post('/api/v1/admin/seasons/start').set(admin.auth).send({ confirm: true });
+
+    const board = await request(app).get(`/api/v1/seasons/${first.id}/leaderboard`).set(a.auth);
+    expect(board.status).toBe(200);
+    expect(board.body.leaderboard).toEqual([expect.objectContaining({ rank: 1, username: a.user.username, points: 4 })]);
+    expect(board.body.leaderboard[0]).not.toHaveProperty('email');
+
+    const list = await request(app).get('/api/v1/seasons').set(a.auth);
+    expect(list.body.items).toHaveLength(2);
+    const running = list.body.items.find((x: { is_current: boolean }) => x.is_current);
+    expect((await request(app).get(`/api/v1/seasons/${running.id}/leaderboard`).set(a.auth)).status).toBe(409);
+    expect((await request(app).get('/api/v1/seasons')).status).toBe(401);
+  });
 });
