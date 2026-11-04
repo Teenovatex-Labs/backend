@@ -77,3 +77,5 @@ export const clarificationReplySchema = z.object({ response: z.string().trim().m
 export const releaseSchema = z.object({ allow_undecided: z.boolean().optional() });
 
 export const guardianSchema = z.object({ parent_email: z.string().trim().toLowerCase().email().max(200) });
+
+export const lookupSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });

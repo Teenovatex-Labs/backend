@@ -145,3 +145,37 @@ export const sendGuardianRequest = (parentEmail: string, childFirstName: string,
     link
   );
 };
+
+export const sendLookupMember = (email: string) =>
+  send(
+    email,
+    'You already have a TeenovateX account',
+    renderEmailShell({
+      preheader: 'Log in with this email.',
+      eyebrow: 'Your account',
+      heading: 'You&rsquo;re already a member.',
+      bodyHtml: '<p style="margin:0 0 12px;">Someone (hopefully you) asked about this email address. It already has a TeenovateX account, so there is nothing to apply for. Log in to carry on.</p>',
+      ctaLabel: 'Log in',
+      ctaHref: `${APP_URL}/login`,
+      footerNote: 'If this was not you, you can ignore this email.',
+    }),
+    'Lookup: member',
+    email
+  );
+
+export const sendLookupNone = (email: string) =>
+  send(
+    email,
+    'We could not find a TeenovateX application',
+    renderEmailShell({
+      preheader: 'No application is linked to this email.',
+      eyebrow: 'Your application',
+      heading: 'No application found.',
+      bodyHtml: '<p style="margin:0 0 12px;">Someone (hopefully you) asked about this email address, but we have no application for it. Applications open in monthly windows. You can ask to be told when the next one opens.</p>',
+      ctaLabel: 'See when we open',
+      ctaHref: `${APP_URL}/apply`,
+      footerNote: 'If this was not you, you can ignore this email.',
+    }),
+    'Lookup: none',
+    email
+  );
