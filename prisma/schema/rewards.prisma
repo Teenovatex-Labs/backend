@@ -57,3 +57,63 @@ model WeeklyClaim {
   @@id([user_id, week, key])
   @@map("weekly_claims")
 }
+
+// High-rank honours: rare, manual and meaningful. Separate from the automatic activity badges (UserBadge).
+enum BadgeTier {
+  standard
+  high
+  top
+}
+
+enum BadgeImageKind {
+  svg
+  png
+  webp
+}
+
+model BadgeDefinition {
+  id            String          @id @default(uuid())
+  slug          String          @unique
+  name          String
+  description   String
+  tier          BadgeTier       @default(high)
+  // Written criteria, shown on the badge detail dialog, so an honour is never a popularity contest.
+  criteria_text String
+  // Raster artwork lives in Cloudinary. SVG is stored sanitised here and served by our own route.
+  image_kind    BadgeImageKind?
+  image_url     String?
+  svg_source    String?
+  // PNG version for emails and notifications.
+  fallback_url  String?
+  active        Boolean         @default(true)
+  repeatable    Boolean         @default(false)
+  created_by    String?
+  created_at    DateTime        @default(now())
+  updated_at    DateTime        @updatedAt
+
+  awards BadgeAward[]
+
+  @@map("badge_definitions")
+}
+
+model BadgeAward {
+  id            String    @id @default(uuid())
+  user_id       String
+  badge_id      String
+  awarded_by    String
+  reason        String
+  // Set when a judged challenge awards it (added in the challenges work).
+  challenge_id  String?
+  awarded_at    DateTime  @default(now())
+  revoked_at    DateTime?
+  revoked_by    String?
+  revoke_reason String?
+  featured      Boolean   @default(false)
+
+  user  User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  badge BadgeDefinition @relation(fields: [badge_id], references: [id])
+
+  @@index([user_id])
+  @@index([badge_id])
+  @@map("badge_awards")
+}
