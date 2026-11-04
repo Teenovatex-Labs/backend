@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { cancelRsvp, createEvent, deleteEvent, getEvent, listEvents, rsvp, updateEvent } from '../controllers/events.js';
-import { optionalAuth, requireAgeConfirmed, requireAuth, requireRole } from '../middleware/auth.js';
+import { optionalAuth, requireAgeConfirmed, requireAuth, requirePermission } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { writeLimiter } from '../middleware/rateLimiter.js';
 import { createEventSchema, updateEventSchema } from '../schemas/events.js';
 
 const router = Router();
-const staff = requireRole('moderator', 'admin');
+const staff = requirePermission('events.manage');
 
 router.get('/', optionalAuth, listEvents);
 router.get('/:id', optionalAuth, getEvent);
