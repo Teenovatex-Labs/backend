@@ -17,12 +17,12 @@ import { app } from '../src/app.js';
 import { config } from '../src/config.js';
 import { prisma } from '../src/db.js';
 import { newResumeToken } from '../src/lib/admissions.js';
-import { acceptQuestion } from '../src/lib/alfred/interview.js';
+import { acceptGenerated, acceptQuestion } from '../src/lib/alfred/interview.js';
 import { PROMPT_VERSION } from '../src/lib/alfred/persona.js';
 import { criterionFor } from '../src/lib/alfred/questions.js';
 import { CRITERIA } from '../src/lib/rubric.js';
 import { makeUser } from './factories.js';
-import { resetDb } from './helpers.js';
+import { answerFor, resetDb } from './helpers.js';
 
 beforeEach(async () => {
   await resetDb();
@@ -92,7 +92,7 @@ describe('Alfred interview', () => {
     config.admissionsAiEnabled = false;
     for (let i = 1; i <= 8; i++) {
       const q = await next(auth);
-      expect((await answer(auth, q.body.next.position, `Answer ${i}`)).status).toBe(200);
+      expect((await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(auth).send(answerFor(q.body.next, `Answer ${i}`))).status).toBe(200);
     }
     expect((await next(auth)).body.next).toBeNull();
     await answer(auth, 1, 'A better first answer');
@@ -100,6 +100,68 @@ describe('Alfred interview', () => {
     expect(row.revision).toBe(2);
     expect(await prisma.applicationAnswerRevision.count({ where: { answer_id: row.id } })).toBe(1);
     expect((await request(app).get('/api/v1/applications/interview').set(auth)).body).toMatchObject({ answered: 8, complete: true, can_submit: true });
+  });
+
+  it('stops early once every criterion has a real answer, but never before six questions', async () => {
+    const { auth } = await setup();
+    const long = 'I took apart an old radio and tried to work out how every little part did its job.';
+    for (let i = 1; i <= 6; i++) {
+      const q = await next(auth);
+      expect(q.body.next.position).toBe(i);
+      expect((await answer(auth, i, long)).body.complete).toBe(i === 6);
+    }
+    const done = await next(auth);
+    expect(done.body.next).toBeNull();
+    expect(done.body).toMatchObject({ answered: 6, complete: true, can_submit: true, total: 8 });
+  });
+
+  it('goes back to a criterion that has only thin answers, up to the maximum of eight', async () => {
+    const { auth, a } = await setup();
+    config.admissionsAiEnabled = false;
+    const long = 'I took apart an old radio and tried to work out how every little part did its job.';
+    for (let i = 1; i <= 6; i++) {
+      const q = await next(auth);
+      // Everything is solid except the collaboration answer (position 4); taps are not evidence either.
+      const body = i === 4 ? { answer: 'Yes' } : answerFor(q.body.next, long);
+      expect((await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(auth).send(body)).status).toBe(200);
+    }
+    const seventh = await next(auth);
+    expect(seventh.body.next.position).toBe(7);
+    const rows = await prisma.applicationAnswer.findMany({ where: { application_id: a.id }, orderBy: { position: 'asc' } });
+    // Growth mindset (position 3) was a slider, so it still has no real evidence and weighs most of what is missing.
+    expect(rows[2]!.format).toBe('slider');
+    expect(rows[6]!.criterion).toBe('growth_mindset');
+  });
+
+  it('asks choice, scale and slider questions, checks the answer fits, and reads it back as text', async () => {
+    const { auth, a } = await setup();
+    config.admissionsAiEnabled = false;
+    await next(auth);
+    await answer(auth, 1, 'I took apart a radio and tried to learn how it worked inside.');
+    await next(auth);
+    await answer(auth, 2, 'I built a small game with my cousin and we shared the work out.');
+    const third = await next(auth);
+    expect(third.body.next).toMatchObject({ position: 3, format: 'slider', spec: { min: 0, max: 10 } });
+    const bad = await request(app).put('/api/v1/applications/interview/answers/3').set(auth).send({ value: 11 });
+    expect(bad.status).toBe(400);
+    expect((await request(app).put('/api/v1/applications/interview/answers/3').set(auth).send({ answer: 'hello' })).body.code).toBe('INVALID_ANSWER');
+    const ok = await request(app).put('/api/v1/applications/interview/answers/3').set(auth).send({ value: 7, note: 'depends on the day' });
+    expect(ok.status).toBe(200);
+    const row = await prisma.applicationAnswer.findFirstOrThrow({ where: { application_id: a.id, position: 3 } });
+    expect(row.answer).toMatchObject({ value: 7, text: expect.stringContaining('7 out of 10') });
+    expect((await request(app).get('/api/v1/applications/interview').set(auth)).body.questions[2]).toMatchObject({ format: 'slider', answer: expect.stringContaining('depends on the day') });
+  });
+
+  it('accepts a format from the AI after the first question, never for the first, and never twice in a row', async () => {
+    const { auth, a } = await setup();
+    gen.reply = JSON.stringify({ question: 'Which of these sounds most like your first move on a new idea?', format: 'choice', options: ['Build a rough version', 'Ask a friend', 'Read about it'] });
+    expect((await next(auth)).body.next).toMatchObject({ position: 1, format: 'text' });
+    await answer(auth, 1, 'I took apart a radio and tried to learn how it worked inside.');
+    expect((await next(auth)).body.next).toMatchObject({ position: 2, format: 'choice', spec: { options: ['Build a rough version', 'Ask a friend', 'Read about it'] } });
+    await request(app).put('/api/v1/applications/interview/answers/2').set(auth).send({ choice: ['Ask a friend'] });
+    gen.reply = JSON.stringify({ question: 'On a scale, how much do you like surprises in a project?', format: 'scale', low: 'not at all', high: 'love them' });
+    expect((await next(auth)).body.next.format).toBe('text'); // the one before was a tap
+    expect(await prisma.applicationAnswer.count({ where: { application_id: a.id } })).toBe(3);
   });
 
   it('answers a worrying message with the fixed reply, alerts staff, and stops the interview', async () => {
@@ -134,6 +196,18 @@ describe('Alfred interview', () => {
     await next(auth);
     expect((await answer(auth, 1, 'x'.repeat(1600))).body.code).toBe('TOO_LONG');
     expect((await answer(auth, 9, 'hello')).status).toBe(404);
+  });
+});
+
+describe('acceptGenerated', () => {
+  it('only accepts well-formed options and ranges', () => {
+    const ok = (o: object) => acceptGenerated(JSON.stringify({ question: 'Which sounds most like you on a new idea?', ...o }));
+    expect(ok({ format: 'choice', options: ['A thing', 'Another thing'] })?.spec).toEqual({ options: ['A thing', 'Another thing'] });
+    expect(ok({ format: 'choice', options: ['Only one'] })).toBeNull();
+    expect(ok({ format: 'choice', options: ['Email me at a@b.co', 'Other'] })).toBeNull();
+    expect(ok({ format: 'multi', options: ['Same', 'Same'] })).toBeNull();
+    expect(ok({ format: 'scale', low: 'a little', high: 'a lot' })?.spec).toEqual({ min: 1, max: 5, low: 'a little', high: 'a lot' });
+    expect(ok({ format: 'bananas' })).toBeNull();
   });
 });
 

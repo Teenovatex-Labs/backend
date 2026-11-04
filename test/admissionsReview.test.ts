@@ -74,6 +74,7 @@ describe('review flow', () => {
   it('lets a reviewer mark a criterion as insufficient evidence without counting it as a low score', async () => {
     const { make, a1 } = await setup();
     const a = await make(1);
+    await prisma.applicationAnswer.create({ data: { application_id: a.id, position: 1, question_key: 'q1', question_text: 'Q?', source: 'fallback', format: 'slider', criterion: 'growth_mindset', answer: { text: '7 out of 10', value: 7 } } });
     await request(app).post(api(`/${a.id}/claim`)).set(a1.auth);
     const res = await request(app).post(api(`/${a.id}/review`)).set(a1.auth).send({ scores: { ...scores, motivation_commitment: null }, recommendation: 'shortlist' });
     expect(res.status).toBe(200);
@@ -81,6 +82,8 @@ describe('review flow', () => {
     expect(res.body.weighted_score).toBe(3.78);
     const detail = await request(app).get(api(`/${a.id}`)).set(a1.auth);
     expect(detail.body.rubric.ratings).toHaveLength(5);
+    // answers come back as plain text, whatever format the question had
+    expect(detail.body.answers).toMatchObject([{ answer: '7 out of 10', format: 'slider' }]);
     expect(detail.body.rubric.criteria.initiative_action.title).toBe('Initiative & Action');
   });
 

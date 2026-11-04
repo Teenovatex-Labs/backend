@@ -81,4 +81,12 @@ export const guardianSchema = z.object({ parent_email: z.string().trim().toLower
 
 export const lookupSchema = z.object({ email: z.string().trim().toLowerCase().email().max(200) });
 
-export const answerSchema = z.object({ answer: z.string().trim().min(1, 'Write an answer first').max(2000) });
+// A typed answer, or a pick (choice/multi), or a number (scale/slider), each with an optional note. The question decides which is valid.
+export const answerSchema = z
+  .object({
+    answer: z.string().trim().max(2000).optional(),
+    choice: z.array(z.string().trim().min(1).max(100)).max(6).optional(),
+    value: z.number().int().min(0).max(10).optional(),
+    note: z.string().trim().max(600).optional(),
+  })
+  .refine((v) => v.answer !== undefined || v.choice !== undefined || v.value !== undefined, 'Write an answer first');

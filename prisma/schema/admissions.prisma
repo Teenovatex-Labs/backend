@@ -168,6 +168,8 @@ model ApplicationAnswer {
   // Which prompt/model version produced an AI question, so scores stay explainable.
   prompt_version String?
   format         String
+  // Options or range for choice, scale and slider questions. Null for typed answers.
+  spec           Json?
   // The rubric criterion this question gathers evidence for.
   criterion      String?
   answer         Json?

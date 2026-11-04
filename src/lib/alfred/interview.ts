@@ -6,8 +6,8 @@ import { createNotification } from '../notify.js';
 import { send } from '../resend.js';
 import { generate, hasProviders } from '../pet/providers.js';
 import { ageOn } from '../age.js';
-import { CRITERIA } from '../rubric.js';
-import { FOCUS, TOTAL_QUESTIONS, criterionFor, pickFallback } from './questions.js';
+import { FOCUS, TOTAL_QUESTIONS, covered as coveredBy, enoughEvidence, nextCriterion, pickFallback } from './questions.js';
+import { acceptSpec, composeAnswer, type AnswerInput, type Format, type Spec } from './formats.js';
 import { PROMPT_VERSION, SYSTEM, userPrompt } from './persona.js';
 import { SAFETY_REPLY, isSensitive } from './safety.js';
 
@@ -23,19 +23,25 @@ const rows = (applicationId: string) => prisma.applicationAnswer.findMany({ wher
 /** True once any answer the applicant gave looks like it needs a person, not an interviewer. */
 export const hasSensitiveAnswer = (answers: ApplicationAnswer[]) => answers.some((a) => isSensitive(textOf(a)));
 
-/** A usable AI question: short, a real question, and nothing that asks for contact details or links. */
-export const acceptQuestion = (raw: string): string | null => {
+export type Generated = { text: string; format: Format; spec: Spec | null };
+
+/** A usable AI question: short, a real question, nothing that asks for contact details or links, and a valid format. */
+export const acceptGenerated = (raw: string): Generated | null => {
   try {
-    const q = (JSON.parse(raw) as { question?: unknown }).question;
-    if (typeof q !== 'string') return null;
-    const t = q.trim();
+    const j = JSON.parse(raw) as { question?: unknown; format?: unknown; options?: unknown; low?: unknown; high?: unknown };
+    if (typeof j.question !== 'string') return null;
+    const t = j.question.trim();
     if (t.length < 15 || t.length > 340 || !t.includes('?')) return null;
     if (/https?:|www\.|@|\d{7,}/i.test(t)) return null;
-    return t;
+    const f = acceptSpec(j.format, j);
+    return f ? { text: t, ...f } : null;
   } catch {
     return null;
   }
 };
+
+/** Just the question text, for callers that do not care about its format. */
+export const acceptQuestion = (raw: string): string | null => acceptGenerated(raw)?.text ?? null;
 
 const aiAllowed = (answers: ApplicationAnswer[]) => config.admissionsAiEnabled && hasProviders() && !hasSensitiveAnswer(answers);
 
@@ -48,32 +54,40 @@ export const ensureNextQuestion = async (app: Application): Promise<ApplicationA
   // Someone who told us something worrying is not put through more questions.
   if (hasSensitiveAnswer(answers)) return null;
 
+  // Alfred stops once every criterion has real evidence and the minimum has been asked.
+  const evidence = answers.map((a) => ({ criterion: a.criterion, text: textOf(a) }));
+  if (enoughEvidence(evidence)) return null;
+
   const position = answers.length + 1;
-  const criterion = criterionFor(position);
+  const criterion = nextCriterion(position, evidence);
   const used = answers.map((a) => a.question_key);
   const age = ageOn(app.birth_date);
-  const covered = CRITERIA.filter((c) => answers.some((a) => a.criterion === c && textOf(a) !== ''));
-  let question: { key: string; text: string; source: 'ai' | 'fallback' } | null = null;
+  const covered = coveredBy(evidence);
+  // Taps and sliders are a change of pace, never the first question and never two in a row.
+  const allowFormats = position > 1 && (answers[answers.length - 1]?.format ?? 'text') === 'text';
+  let question: { key: string; text: string; source: 'ai' | 'fallback'; format: string; spec: Spec | null } | null = null;
 
   if (aiAllowed(answers)) {
     try {
       const history = answers.map((a) => ({ question: a.question_text, answer: textOf(a) }));
-      let accepted: string | null = null;
-      await generate({ system: SYSTEM, user: userPrompt(FOCUS[criterion], history, app.interests, covered.map((c) => FOCUS[c].split(':')[0]!), { age, skill_level: app.skill_level }) }, (t) => (accepted = acceptQuestion(t)) !== null, fetch, { maxTokens: 260, temperature: 0.7 });
-      if (accepted) question = { key: `ai-${position}`, text: accepted, source: 'ai' };
+      let accepted: Generated | null = null;
+      await generate({ system: SYSTEM, user: userPrompt(FOCUS[criterion], history, app.interests, covered.map((c) => FOCUS[c].split(':')[0]!), { age, skill_level: app.skill_level, allowFormats }) }, (t) => (accepted = acceptGenerated(t)) !== null, fetch, { maxTokens: 300, temperature: 0.7 });
+      const g = accepted as Generated | null;
+      if (g) question = { key: `ai-${position}`, text: g.text, source: 'ai', format: allowFormats ? g.format : 'text', spec: allowFormats ? g.spec : null };
     } catch {
       // Every provider failed or answered badly: the fixed bank takes over.
     }
   }
   if (!question) {
-    const f = pickFallback(criterion, used, { age, interests: app.interests });
+    const f = pickFallback(criterion, used, { age, interests: app.interests, allowFormats, preferFormats: allowFormats && (position === 3 || position === 5) });
     if (!f) return null;
-    question = { key: f.key, text: f.text, source: 'fallback' };
+    const format = f.format === 'scenario' ? 'text' : f.format;
+    question = { key: f.key, text: f.text, source: 'fallback', format, spec: f.spec ?? null };
   }
 
   try {
     return await prisma.applicationAnswer.create({
-      data: { application_id: app.id, position, question_key: question.key, question_text: question.text, source: question.source, prompt_version: question.source === 'ai' ? PROMPT_VERSION : null, format: 'text', criterion },
+      data: { application_id: app.id, position, question_key: question.key, question_text: question.text, source: question.source, prompt_version: question.source === 'ai' ? PROMPT_VERSION : null, format: question.format, spec: question.spec ?? Prisma.JsonNull, criterion },
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return (await rows(app.id)).find((a) => a.position === position) ?? null;
@@ -83,18 +97,22 @@ export const ensureNextQuestion = async (app: Application): Promise<ApplicationA
 
 export type InterviewState = Awaited<ReturnType<typeof interviewState>>;
 
+const specOf = (a: Pick<ApplicationAnswer, 'spec'>): Spec | null => (a.spec as Spec | null) ?? null;
+
 export const interviewState = async (app: Application) => {
   const answers = await rows(app.id);
   const answered = answers.filter((a) => textOf(a) !== '');
   const flagged = hasSensitiveAnswer(answers);
-  const complete = answered.length >= TOTAL_QUESTIONS;
+  // Alfred may stop before the maximum once he has heard enough about every quality.
+  const complete = answered.length >= TOTAL_QUESTIONS || enoughEvidence(answers.map((a) => ({ criterion: a.criterion, text: textOf(a) })));
   return {
+    // The most Alfred will ask. He may finish sooner.
     total: TOTAL_QUESTIONS,
     answered: answered.length,
     complete,
     // Someone who flagged something may submit what they have, so a worried applicant is never trapped.
     can_submit: complete || (flagged && answered.length >= 1),
-    questions: answers.map((a) => ({ position: a.position, question: a.question_text, format: a.format, answer: textOf(a) || null })),
+    questions: answers.map((a) => ({ position: a.position, question: a.question_text, format: a.format, spec: specOf(a), answer: textOf(a) || null })),
   };
 };
 
@@ -115,15 +133,18 @@ const alertSafeguarding = async (reference: string) => {
   await Promise.all((designated.length ? designated : []).map((to) => send(to, 'Safeguarding alert: please open the admin console', '<p>An application needs a safeguarding review today. Open the admin console and read it with care. This email deliberately says nothing more.</p>', 'Safeguarding alert', reference).catch((err) => console.error('Safeguarding email failed:', err))));
 };
 
-/** Saves (or edits) an answer. Returns the fixed safety message if the answer needs a person. */
-export const saveAnswer = async (app: Application, position: number, text: string) => {
+/** Saves (or edits) an answer. Returns the fixed safety message if the answer needs a person, or a message if the answer does not fit the question. */
+export const saveAnswer = async (app: Application, position: number, input: AnswerInput) => {
   const row = await prisma.applicationAnswer.findUnique({ where: { application_id_position: { application_id: app.id, position } } });
   if (!row) return null;
+  const composed = composeAnswer(row.format, specOf(row), input);
+  if (!composed.ok) return { invalid: composed.message, safety: null };
+  const text = composed.text;
   const previous = textOf(row);
   if (previous === text) return { safety: isSensitive(text) ? SAFETY_REPLY : null };
   await prisma.$transaction([
     ...(previous ? [prisma.applicationAnswerRevision.create({ data: { answer_id: row.id, answer: row.answer ?? Prisma.JsonNull } })] : []),
-    prisma.applicationAnswer.update({ where: { id: row.id }, data: { answer: { text }, revision: previous ? { increment: 1 } : undefined } }),
+    prisma.applicationAnswer.update({ where: { id: row.id }, data: { answer: composed.json as Prisma.InputJsonObject, revision: previous ? { increment: 1 } : undefined } }),
   ]);
   if (!isSensitive(text)) return { safety: null };
 

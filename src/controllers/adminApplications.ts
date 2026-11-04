@@ -5,6 +5,8 @@ import { HttpError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
 import { ageOn } from '../lib/age.js';
 import { can } from '../lib/permissions.js';
+import { config } from '../config.js';
+import { gatherEvidence, suggestionsVisible } from '../lib/alfred/evidence.js';
 import { CRITERIA, CRITERION_GUIDE, INSUFFICIENT_EVIDENCE, RATING_GUIDE, RUBRIC, weightedScore, type Criterion, type Rating } from '../lib/rubric.js';
 import { RETENTION_MS } from '../lib/admissions.js';
 import { sendClarificationRequest } from '../lib/admissionsEmail.js';
@@ -69,6 +71,31 @@ export const summariseApplication = async (req: AuthRequest, res: Response): Pro
   res.json({ summary: result.summary, machine_written: true, notice: 'Machine-written reading aid. It does not recommend or score anyone. Check it against the answers.' });
 };
 
+/**
+ * Evidence organised by rubric criterion, with quotes checked against the real answers. Suggested 1-5 ratings are held back
+ * until this reviewer has saved their own review (configurable), so the machine's number cannot anchor theirs.
+ */
+export const evidenceForApplication = async (req: AuthRequest, res: Response): Promise<void> => {
+  const app = await find(String(req.params.id));
+  const answers = await prisma.applicationAnswer.findMany({ where: { application_id: app.id }, orderBy: { position: 'asc' } });
+  const result = await gatherEvidence({ ...app, answers });
+  await audit(req.userId!, 'application.evidence', { type: 'application', id: app.id }, { ok: result.ok, ...(result.ok ? { prompt_version: result.prompt_version } : { reason: result.reason }) });
+  if (!result.ok) {
+    const message = { DISABLED: 'Evidence summaries are switched off.', SENSITIVE: 'Read this application in full: something in it needs a person.', FAILED: 'Evidence could not be gathered. Please read the answers directly.' }[result.reason];
+    throw new HttpError(result.reason === 'FAILED' ? 502 : 409, `EVIDENCE_${result.reason}`, message);
+  }
+  const own = await prisma.applicationReview.findFirst({ where: { application_id: app.id, reviewer_id: req.userId!, submitted_at: { not: null } }, select: { id: true } });
+  const show = suggestionsVisible(config.suggestedRatings, own !== null);
+  const hasSuggestions = result.criteria.some((c) => c.suggested_rating !== null);
+  res.json({
+    criteria: result.criteria.map((c) => ({ ...c, suggested_rating: show ? c.suggested_rating : null })),
+    suggestions_visible: show,
+    suggestions_hidden_until_review: !show && config.suggestedRatings === 'after_review' && hasSuggestions,
+    machine_written: true,
+    notice: 'Machine-written reading aid. Quotes are checked against the answers. Any suggested rating is a starting point you can ignore: you rate, you decide.',
+  });
+};
+
 export const getApplication = async (req: AuthRequest, res: Response): Promise<void> => {
   const app = await find(String(req.params.id));
   const reviews = await prisma.applicationReview.findMany({ where: { application_id: app.id }, orderBy: { created_at: 'asc' } });
@@ -91,7 +118,7 @@ export const getApplication = async (req: AuthRequest, res: Response): Promise<v
     current_skills: app.current_skills, learning_goals: app.learning_goals,
     portfolio_url: app.portfolio_url, github_url: app.github_url, linkedin_url: app.linkedin_url,
     second_reviewer_id: app.second_reviewer_id, decided_by: app.decided_by, decision_note: app.decision_note,
-    answers: answers.map((a) => ({ id: a.id, position: a.position, question: a.question_text, source: a.source, criterion: a.criterion, answer: a.answer })),
+    answers: answers.map((a) => ({ id: a.id, position: a.position, question: a.question_text, source: a.source, format: a.format, criterion: a.criterion, answer: ((a.answer as { text?: unknown } | null)?.text as string | undefined) ?? '' })),
     attachments: attachments.map((a) => ({ id: a.id, kind: a.kind, url: a.url, filename: a.filename, scan_status: a.scan_status })),
     clarifications: clarifications.map((c) => ({ id: c.id, question: c.question, response: c.response, status: c.status, due_at: c.due_at.toISOString() })),
     reviews: shown.map((r) => ({ id: r.id, reviewer_id: r.reviewer_id, kind: r.kind, scores: r.scores, weighted_score: r.weighted_score, recommendation: r.recommendation, note: r.note, submitted_at: r.submitted_at?.toISOString() ?? null })),

@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/db.js';
 import { makeUser } from './factories.js';
-import { resetDb } from './helpers.js';
+import { answerFor, resetDb } from './helpers.js';
 
 const sent = vi.hoisted(() => ({ tokens: [] as string[], received: [] as string[] }));
 vi.mock('../src/lib/admissionsEmail.js', () => ({
@@ -88,7 +88,7 @@ describe('the applicant journey', () => {
     expect((await request(app).post('/api/v1/applications/submit').set(bearer(token))).body.code).toBe('INTERVIEW_INCOMPLETE');
     for (let i = 1; i <= 8; i++) {
       const q = await request(app).post('/api/v1/applications/interview/next').set(bearer(token));
-      await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(bearer(token)).send({ answer: `Answer number ${i}` });
+      await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(bearer(token)).send(answerFor(q.body.next, `Answer number ${i}`));
     }
     const sub = await request(app).post('/api/v1/applications/submit').set(bearer(token));
     expect(sub.status).toBe(200);
@@ -116,7 +116,7 @@ describe('the applicant journey', () => {
     await request(app).patch('/api/v1/applications/draft').set(bearer(token)).send({ interests: ['ai'] });
     for (let i = 1; i <= 8; i++) {
       const q = await request(app).post('/api/v1/applications/interview/next').set(bearer(token));
-      await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(bearer(token)).send({ answer: `Answer ${i}` });
+      await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(bearer(token)).send(answerFor(q.body.next, `Answer ${i}`));
     }
     await prisma.applicationWindow.update({ where: { id: w.id }, data: { closes_at: new Date(Date.now() - 1000) } });
     const late = await request(app).post('/api/v1/applications/submit').set(bearer(token));
