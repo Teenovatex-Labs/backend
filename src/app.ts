@@ -29,6 +29,8 @@ import notificationsRouter from './routes/notifications.js';
 import settingsRouter from './routes/settings.js';
 import pushRouter from './routes/push.js';
 import contactRouter from './routes/contact.js';
+import admissionsRouter from './routes/admissions.js';
+import adminCohortsRouter from './routes/adminCohorts.js';
 
 const app = express();
 
@@ -63,7 +65,9 @@ app.use(`${v1}/events`, eventsRouter);
 app.use(`${v1}/learn`, learnRouter);
 app.use(`${v1}/reports`, reportsRouter);
 app.use(`${v1}/blocks`, blocksRouter);
+app.use(`${v1}/admin/cohorts`, adminCohortsRouter);
 app.use(`${v1}/admin`, adminRouter);
+app.use(`${v1}/applications`, admissionsRouter);
 app.use(`${v1}/community`, communityRouter);
 app.use(`${v1}/messages`, messagesRouter);
 app.use(`${v1}/pet`, petRouter);

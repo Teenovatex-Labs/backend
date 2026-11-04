@@ -13,7 +13,7 @@ const FROM = config.resend.from;
 const SITE_URL = config.siteUrl;
 const APP_URL = config.appUrl;
 
-const send = async (to: string, subject: string, html: string, devLabel: string, devExtra: string) => {
+export const send = async (to: string, subject: string, html: string, devLabel: string, devExtra: string) => {
   if (!resend) {
     console.log(`[DEV] ${devLabel} for ${to}: ${devExtra}`);
     return;
