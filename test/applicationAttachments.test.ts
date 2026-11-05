@@ -11,6 +11,8 @@ const cloud = vi.hoisted(() => ({ uploaded: [] as Buffer[], deleted: [] as strin
 vi.mock('../src/middleware/upload.js', async (orig) => ({
   ...(await orig<typeof import('../src/middleware/upload.js')>()),
   uploadPrivateImage: vi.fn(async (buf: Buffer) => { cloud.uploaded.push(buf); return { public_id: `applications/t-${cloud.uploaded.length}` }; }),
+  uploadPrivatePdf: vi.fn(async (buf: Buffer) => { cloud.uploaded.push(buf); return { public_id: `applications/pdf-${cloud.uploaded.length}` }; }),
+  deletePrivatePdf: vi.fn(async (id: string) => { cloud.deleted.push(id); }),
   signedImageUrl: vi.fn((id: string) => `https://signed.example.com/${id}`),
   deletePrivateImage: vi.fn(async (id: string) => { cloud.deleted.push(id); }),
 }));
@@ -80,5 +82,32 @@ describe('application attachments', () => {
     expect((await runRetention()).declined).toBe(1);
     expect(cloud.deleted).toEqual(['applications/t-1']);
     expect(await prisma.applicationAttachment.count()).toBe(0);
+  });
+});
+
+describe('application PDFs', () => {
+  const pdf = (extra = '') => Buffer.from(`%PDF-1.4\n1 0 obj\n<< /Type /Catalog ${extra}>>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n`);
+  const send = (token: string, buf: Buffer, name = 'work.pdf', type = 'application/pdf') =>
+    request(app).post('/api/v1/applications/attachments/pdf').set(bearer(token)).attach('pdf', buf, { filename: name, contentType: type });
+
+  it('accepts a plain PDF, caps them at two, and deletes them from storage', async () => {
+    const token = await begin();
+    expect((await send(token, pdf())).status).toBe(201);
+    expect((await send(token, pdf())).status).toBe(201);
+    expect((await send(token, pdf())).body.code).toBe('ATTACHMENT_LIMIT');
+    const list = await request(app).get('/api/v1/applications/attachments').set(bearer(token));
+    expect(list.body.items.filter((i: { kind: string }) => i.kind === 'pdf')).toHaveLength(2);
+    await request(app).delete(`/api/v1/applications/attachments/${list.body.items[0].id}`).set(bearer(token));
+    expect(cloud.deleted).toHaveLength(1);
+  });
+
+  it('rejects fake PDFs, damaged ones, and ones that run code or open on their own', async () => {
+    const token = await begin();
+    expect((await send(token, Buffer.from('not a pdf at all'))).body.code).toBe('INVALID_PDF');
+    expect((await send(token, Buffer.from('%PDF-1.4\nno end marker'))).body.code).toBe('INVALID_PDF');
+    expect((await send(token, pdf('/OpenAction 2 0 R '))).body.code).toBe('INVALID_PDF');
+    expect((await send(token, pdf('/JavaScript (app.alert(1)) '))).body.code).toBe('INVALID_PDF');
+    expect((await send(token, pdf(), 'x.pdf', 'image/png')).body.code).toBe('INVALID_FILE_TYPE');
+    expect(cloud.uploaded).toHaveLength(0);
   });
 });

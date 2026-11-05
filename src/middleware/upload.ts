@@ -71,3 +71,35 @@ export const deletePrivateImage = async (publicId: string): Promise<void> => {
     // a missing file is not worth failing a moderation action over
   }
 };
+
+export const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') cb(null, true);
+    else cb(new HttpError(400, 'INVALID_FILE_TYPE', 'Documents must be PDF files'));
+  },
+});
+
+export const uploadPrivatePdf = (buffer: Buffer, folder: string): Promise<{ public_id: string }> =>
+  new Promise((resolve, reject) => {
+    assertConfigured();
+    cloudinary.uploader
+      .upload_stream({ folder, resource_type: 'raw', type: 'authenticated' }, (err, result) => {
+        if (err ?? !result) reject(err ?? new Error('Upload failed'));
+        else resolve({ public_id: result!.public_id });
+      })
+      .end(buffer);
+  });
+
+/** A short-lived signed link that downloads the PDF rather than showing it in the browser. */
+export const signedPdfUrl = (publicId: string): string =>
+  cloudinary.url(publicId, { type: 'authenticated', sign_url: true, secure: true, resource_type: 'raw', flags: 'attachment' });
+
+export const deletePrivatePdf = async (publicId: string): Promise<void> => {
+  try {
+    await cloudinary.uploader.destroy(publicId, { type: 'authenticated', resource_type: 'raw', invalidate: true });
+  } catch {
+    // a missing file is not worth failing a moderation action over
+  }
+};
