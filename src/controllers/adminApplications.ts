@@ -11,7 +11,7 @@ import { CRITERIA, CRITERION_GUIDE, INSUFFICIENT_EVIDENCE, RATING_GUIDE, RUBRIC,
 import { OFFER_HOURS, RETENTION_MS } from '../lib/admissions.js';
 import { hashToken } from '../lib/tokens.js';
 import crypto from 'node:crypto';
-import { sendClarificationRequest, sendWaitlistOffer } from '../lib/admissionsEmail.js';
+import { sendClarificationRequest, sendInterviewInvite, sendWaitlistOffer } from '../lib/admissionsEmail.js';
 import { summarise } from '../lib/alfred/summary.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
@@ -36,6 +36,7 @@ const offerOf = (a: OfferFields) => {
 
 const summary = (a: { id: string; reference: string; status: ApplicationStatus; full_name: string; birth_date: Date; country: string; submitted_at: Date | null; claimed_by: string | null; window_id: string } & OfferFields) => ({
   waitlist_offer: offerOf(a),
+  interview_invited_at: (a as { interview_invited_at?: Date | null }).interview_invited_at?.toISOString() ?? null,
   id: a.id, reference: a.reference, status: a.status, full_name: a.full_name, age: ageOn(a.birth_date),
   country: a.country, submitted_at: a.submitted_at?.toISOString() ?? null, claimed_by: a.claimed_by, window_id: a.window_id,
 });
@@ -258,4 +259,16 @@ export const offerWaitlistPlace = async (req: AuthRequest, res: Response): Promi
   }
   await audit(req.userId!, 'application.waitlist_offer', { type: 'application', id: app.id });
   res.status(201).json({ expires_at: expires.toISOString() });
+};
+
+/** Invites the applicant to a short call. Only the reviewer on the application can, and it does not change any decision. */
+export const inviteToInterview = async (req: AuthRequest, res: Response): Promise<void> => {
+  const app = await find(String(req.params.id));
+  assertReviewer(app, req.userId!);
+  if (!['submitted', 'under_review', 'shortlisted'].includes(app.status)) throw new HttpError(409, 'ALREADY_DECIDED', 'Decided applications cannot be invited to a call.');
+  const { details } = req.body as { details: string };
+  await sendInterviewInvite(app.email, details);
+  await prisma.application.update({ where: { id: app.id }, data: { interview_invited_at: new Date() } });
+  await audit(req.userId!, 'application.interview_invite', { type: 'application', id: app.id });
+  res.status(201).json({ message: 'Invitation sent' });
 };

@@ -3,7 +3,7 @@ import * as c from '../controllers/adminApplications.js';
 import { reviewerLink } from '../controllers/applicationAttachments.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { clarificationSchema, decisionSchema, reverseSchema, reviewSchema, secondReviewSchema } from '../schemas/admissions.js';
+import { clarificationSchema, interviewInviteSchema, decisionSchema, reverseSchema, reviewSchema, secondReviewSchema } from '../schemas/admissions.js';
 
 const router = Router();
 router.use(requireAuth, requirePermission('applications.review'));
@@ -18,6 +18,7 @@ router.post('/:id/claim', c.claimApplication);
 router.post('/:id/review', validate(reviewSchema), c.saveReview);
 router.post('/:id/second-review', validate(secondReviewSchema), c.assignSecondReviewer);
 router.post('/:id/clarification', validate(clarificationSchema), c.askClarification);
+router.post('/:id/interview-invite', validate(interviewInviteSchema), c.inviteToInterview);
 router.post('/:id/decision', validate(decisionSchema), c.decide);
 router.post('/:id/waitlist-offer', c.offerWaitlistPlace);
 router.post('/:id/reverse', validate(reverseSchema), c.reverse);

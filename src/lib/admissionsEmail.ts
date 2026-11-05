@@ -198,3 +198,22 @@ export const sendWaitlistOffer = (email: string, token: string, hours: number) =
     link
   );
 };
+
+const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+export const sendInterviewInvite = (email: string, details: string) =>
+  send(
+    email,
+    'We would like to chat: your TeenovateX application',
+    renderEmailShell({
+      preheader: 'A short, friendly call. Not a test.',
+      eyebrow: 'Your application',
+      heading: 'Let&rsquo;s have a short chat.',
+      bodyHtml: `<p style="margin:0 0 12px;">We liked your application and would like a short, friendly call to get to know you better. It is not a test, and there is nothing to prepare. A parent or guardian is welcome to be there.</p><p style="margin:0;white-space:pre-line;">${esc(details)}</p>`,
+      ctaLabel: 'Open my application',
+      ctaHref: `${APP_URL}/apply/track`,
+      footerNote: 'Reply to this email if the time does not work. This is not an acceptance yet.',
+    }),
+    'Interview invite',
+    email
+  );

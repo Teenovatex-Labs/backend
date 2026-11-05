@@ -6,16 +6,17 @@ import { hashToken } from '../src/lib/tokens.js';
 import { makeUser } from './factories.js';
 import { resetDb } from './helpers.js';
 
-const sent = vi.hoisted(() => ({ accept: [] as string[], decline: 0, wait: 0 }));
+const sent = vi.hoisted(() => ({ accept: [] as string[], decline: 0, wait: 0, invites: [] as string[] }));
 vi.mock('../src/lib/admissionsEmail.js', () => ({
   sendApplicationLink: async () => {}, sendApplicationReceived: async () => {}, sendApplicationReminderOpen: async () => {},
   sendClarificationRequest: async () => {},
+  sendInterviewInvite: async (_e: string, d: string) => { sent.invites.push(d); },
   sendAcceptance: async (_e: string, t: string) => { sent.accept.push(t); },
   sendDecline: async () => { sent.decline++; },
   sendWaitlisted: async () => { sent.wait++; },
 }));
 
-beforeEach(async () => { await resetDb(); sent.accept.length = 0; sent.decline = 0; sent.wait = 0; });
+beforeEach(async () => { await resetDb(); sent.accept.length = 0; sent.invites.length = 0; sent.decline = 0; sent.wait = 0; });
 afterAll(() => prisma.$disconnect());
 
 const DAY = 86_400_000;
@@ -41,6 +42,24 @@ const setup = async (windowOver: Record<string, unknown> = {}) => {
 const api = (p: string) => `/api/v1/admin/applications${p}`;
 const review = (id: string, who: { auth: Record<string, string> }, rec = 'accept') =>
   request(app).post(api(`/${id}/review`)).set(who.auth).send({ scores, recommendation: rec });
+
+describe('interview invites', () => {
+  it('lets the claiming reviewer invite once decided is out of the picture, and changes no status', async () => {
+    const { make, a1, a2 } = await setup();
+    const a = await make(1);
+    await request(app).post(api(`/${a.id}/claim`)).set(a1.auth);
+    const body = { details: 'Friday 4pm WAT on Google Meet.' };
+    expect((await request(app).post(api(`/${a.id}/interview-invite`)).set(a2.auth).send(body)).body.code).toBe('NOT_YOUR_REVIEW');
+    expect((await request(app).post(api(`/${a.id}/interview-invite`)).set(a1.auth).send({ details: 'short' })).status).toBe(400);
+    expect((await request(app).post(api(`/${a.id}/interview-invite`)).set(a1.auth).send(body)).status).toBe(201);
+    expect(sent.invites).toEqual([body.details]);
+    const row = await prisma.application.findUniqueOrThrow({ where: { id: a.id } });
+    expect(row.status).toBe('under_review');
+    expect(row.interview_invited_at).not.toBeNull();
+    await prisma.application.update({ where: { id: a.id }, data: { status: 'declined' } });
+    expect((await request(app).post(api(`/${a.id}/interview-invite`)).set(a1.auth).send(body)).body.code).toBe('ALREADY_DECIDED');
+  });
+});
 
 describe('review flow', () => {
   it('is admin-only and hides drafts', async () => {
