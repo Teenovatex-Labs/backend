@@ -94,3 +94,5 @@ export const answerSchema = z
 export const helpSchema = z.object({ action: z.enum(['hint', 'alternative', 'skip']) });
 
 export const offerResponseSchema = z.object({ accept: z.boolean() });
+
+export const interviewInviteSchema = z.object({ details: z.string().trim().min(10).max(800) });

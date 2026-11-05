@@ -133,6 +133,8 @@ model Application {
   decided_at          DateTime?
   // Results stay private until the window's decision date.
   published_at        DateTime?
+  // Set when a reviewer invites the applicant to a short call. It changes no status and no decision.
+  interview_invited_at DateTime?
   // A waitlist place offered by hand. The applicant has 72 hours to accept or decline.
   waitlist_offer_hash       String?   @unique
   waitlist_offer_sent_at    DateTime?
