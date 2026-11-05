@@ -39,3 +39,21 @@ export async function assertCanSendImage(userId: string, now: Date = new Date())
   const today = await prisma.messageAttachment.count({ where: { uploader_id: userId, created_at: { gt: new Date(now.getTime() - 86_400_000) } } });
   if (today >= ATTACHMENTS_PER_DAY) throw new HttpError(429, 'IMAGE_LIMIT', `You can send ${ATTACHMENTS_PER_DAY} images a day.`);
 }
+
+export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+
+// Features that let a PDF run code, open things on its own or hide other files inside it.
+const RISKY_PDF = /\/(JavaScript|JS|OpenAction|AA|Launch|EmbeddedFiles?|RichMedia|XFA|SubmitForm|ImportData)\b/;
+
+/**
+ * Hardening, not antivirus. The file must really be a PDF and must not use features that run code or open
+ * things by themselves. Names hidden inside compressed object streams can slip past a text check, which is why
+ * reviewers only download these files and never open them in the browser.
+ */
+export function checkPdf(buffer: Buffer): void {
+  const bad = (m: string) => new HttpError(400, 'INVALID_PDF', m);
+  if (buffer.length === 0 || buffer.length > MAX_PDF_BYTES) throw bad('A PDF must be under 10 MB.');
+  if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') throw bad("That file isn't a PDF.");
+  if (!buffer.subarray(Math.max(0, buffer.length - 2048)).toString('latin1').includes('%%EOF')) throw bad('That PDF looks damaged. Try saving it again.');
+  if (RISKY_PDF.test(buffer.toString('latin1'))) throw bad('That PDF has interactive parts we cannot accept. Export it as a plain PDF and try again.');
+}

@@ -1,7 +1,7 @@
 import { prisma } from '../db.js';
 import { audit } from '../lib/audit.js';
 import { needsGuardian } from '../lib/guardian.js';
-import { deletePrivateImage } from '../middleware/upload.js';
+import { deletePrivateImage, deletePrivatePdf } from '../middleware/upload.js';
 
 // Applicant data is kept only as long as it is needed. Two things end it early or on schedule:
 //  - a declined application, 6 months after the decision (a reapplication resets the clock);
@@ -11,14 +11,14 @@ import { deletePrivateImage } from '../middleware/upload.js';
 // Not covered, because the policy is undefined: drafts that were never submitted.
 
 const deleteApplication = async (id: string, reference: string, reason: string) => {
-  const files = await prisma.applicationAttachment.findMany({ where: { application_id: id, public_id: { not: null } }, select: { public_id: true } });
+  const files = await prisma.applicationAttachment.findMany({ where: { application_id: id, public_id: { not: null } }, select: { public_id: true, kind: true } });
   await prisma.$transaction(async (tx) => {
     await tx.invitation.deleteMany({ where: { application_id: id, used_at: null } });
     await tx.application.delete({ where: { id } });
     await audit(null, 'application.purge', { type: 'application', id }, { reference, reason }, tx);
   });
   // Applicant photos go with the application; a missing file is not worth failing the purge over.
-  for (const f of files) await deletePrivateImage(f.public_id!);
+  for (const f of files) await (f.kind === 'pdf' ? deletePrivatePdf : deletePrivateImage)(f.public_id!);
 };
 
 export async function runRetention(now: Date = new Date()): Promise<{ declined: number; consent: number; expired_consents: number }> {
