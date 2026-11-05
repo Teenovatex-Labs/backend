@@ -54,3 +54,5 @@ export const newInvitation = () => {
   const token = crypto.randomBytes(32).toString('hex');
   return { token, hash: hashToken(token), expires: new Date(Date.now() + INVITE_DAYS * 86_400_000) };
 };
+
+export const OFFER_HOURS = 72;

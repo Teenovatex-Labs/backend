@@ -179,3 +179,22 @@ export const sendLookupNone = (email: string) =>
     'Lookup: none',
     email
   );
+
+export const sendWaitlistOffer = (email: string, token: string, hours: number) => {
+  const link = `${APP_URL}/apply/offer?token=${token}`;
+  return send(
+    email,
+    'A place has opened up at TeenovateX',
+    renderEmailShell({
+      preheader: `A place is yours if you want it. Reply within ${hours} hours.`,
+      eyebrow: 'Waitlist',
+      heading: 'A place has opened up.',
+      bodyHtml: `<p style="margin:0 0 12px;">Good news: a place in TeenovateX has opened up and we would like to offer it to you. Please tell us within ${hours} hours whether you want it. If we do not hear back, the place goes to the next person on the waitlist.</p>`,
+      ctaLabel: 'Answer the offer',
+      ctaHref: link,
+      footerNote: 'This link is only for you, so please do not share it.',
+    }),
+    'Waitlist offer',
+    link
+  );
+};

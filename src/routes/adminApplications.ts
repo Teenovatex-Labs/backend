@@ -19,6 +19,7 @@ router.post('/:id/review', validate(reviewSchema), c.saveReview);
 router.post('/:id/second-review', validate(secondReviewSchema), c.assignSecondReviewer);
 router.post('/:id/clarification', validate(clarificationSchema), c.askClarification);
 router.post('/:id/decision', validate(decisionSchema), c.decide);
+router.post('/:id/waitlist-offer', c.offerWaitlistPlace);
 router.post('/:id/reverse', validate(reverseSchema), c.reverse);
 
 export default router;

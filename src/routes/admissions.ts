@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { answerQuestion, questionHelp, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
+import { answerQuestion, questionHelp, respondToOffer, viewOffer, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
 import { confirmConsent, requestGuardian, showConsent, withdrawConsent } from '../controllers/guardian.js';
 import { addLink, listMine, removeAttachment, uploadImage, uploadPdf } from '../controllers/applicationAttachments.js';
 import { requireApplicant } from '../middleware/applicant.js';
@@ -7,7 +7,7 @@ import { attachmentUpload, pdfUpload } from '../middleware/upload.js';
 import { z } from 'zod';
 import { authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import { answerSchema, clarificationReplySchema, guardianSchema, helpSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
+import { answerSchema, clarificationReplySchema, guardianSchema, helpSchema, offerResponseSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
 
 const router = Router();
 
@@ -19,6 +19,8 @@ router.post('/start', otpRequestLimiter, validate(startApplicationSchema), start
 router.post('/lookup', otpRequestLimiter, validate(lookupSchema), lookupStatus);
 
 router.get('/me', authLimiter, requireApplicant, getMyApplication);
+router.get('/offer/:token', viewOffer);
+router.post('/offer/:token/respond', authLimiter, validate(offerResponseSchema), respondToOffer);
 router.get('/interview', requireApplicant, getInterview);
 router.post('/interview/next', authLimiter, requireApplicant, nextQuestion);
 router.put('/interview/answers/:position', requireApplicant, validate(answerSchema), answerQuestion);
