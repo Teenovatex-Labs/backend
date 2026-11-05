@@ -199,6 +199,47 @@ describe('Alfred interview', () => {
   });
 });
 
+describe('Alfred help', () => {
+  const help = (auth: Record<string, string>, pos: number, action: string) => request(app).post(`/api/v1/applications/interview/${pos}/help`).set(auth).send({ action });
+
+  it('gives a hint without changing the question', async () => {
+    const { auth } = await setup();
+    const q = await next(auth);
+    const r = await help(auth, q.body.next.position, 'hint');
+    expect(r.status).toBe(200);
+    expect(r.body.hint).toMatch(/Think of a time/);
+    expect(r.body.questions[0].question).toBe(q.body.next.question);
+  });
+
+  it('swaps in a different question, at most twice per question', async () => {
+    const { auth, a } = await setup();
+    config.admissionsAiEnabled = false;
+    const q = await next(auth);
+    const before = q.body.next.question;
+    const r1 = await help(auth, 1, 'alternative');
+    expect(r1.status).toBe(200);
+    expect(r1.body.questions[0].question).not.toBe(before);
+    const row = await prisma.applicationAnswer.findFirstOrThrow({ where: { application_id: a.id } });
+    expect(row.criterion).toBe('curiosity_creativity');
+    await help(auth, 1, 'alternative');
+    expect((await help(auth, 1, 'alternative')).status).toBe(409);
+  });
+
+  it('limits skips, moves to another quality, and refuses once a question is answered', async () => {
+    const { auth, a } = await setup();
+    config.admissionsAiEnabled = false;
+    await next(auth);
+    expect((await help(auth, 1, 'skip')).status).toBe(200);
+    const row = await prisma.applicationAnswer.findFirstOrThrow({ where: { application_id: a.id, position: 1 } });
+    expect(row.criterion).not.toBe('curiosity_creativity');
+    expect((await prisma.application.findUniqueOrThrow({ where: { id: a.id } })).alfred_skips).toBe(1);
+    await help(auth, 1, 'skip');
+    expect((await help(auth, 1, 'skip')).status).toBe(409);
+    await answer(auth, 1, 'I took apart a radio to see how it worked');
+    expect((await help(auth, 1, 'hint')).status).toBe(409);
+  });
+});
+
 describe('acceptGenerated', () => {
   it('only accepts well-formed options and ranges', () => {
     const ok = (o: object) => acceptGenerated(JSON.stringify({ question: 'Which sounds most like you on a new idea?', ...o }));
