@@ -13,7 +13,7 @@ import {
   windowState,
 } from '../lib/admissions.js';
 import { sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
-import { ANSWER_MAX, ensureNextQuestion, interviewState, saveAnswer } from '../lib/alfred/interview.js';
+import { ANSWER_MAX, ensureNextQuestion, helpWithQuestion, interviewState, MAX_SKIPS, saveAnswer } from '../lib/alfred/interview.js';
 import { needsGuardian } from '../lib/guardian.js';
 import { createNotification } from '../lib/notify.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
@@ -246,4 +246,15 @@ export const answerQuestion = async (req: ApplicantRequest, res: Response): Prom
   if (!result) throw new HttpError(404, 'NOT_FOUND', 'There is no such question.');
   if ('invalid' in result) throw new HttpError(422, 'INVALID_ANSWER', result.invalid ?? 'That answer does not fit the question.');
   res.json({ saved: true, safety_message: result.safety, ...(await interviewState(app)) });
+};
+
+export const questionHelp = async (req: ApplicantRequest, res: Response): Promise<void> => {
+  const app = await carryForward(req.application!);
+  if (!(app.status === 'draft' || (app.status === 'submitted' && !app.locked_at))) throw new HttpError(409, 'APPLICATION_LOCKED', 'This application is being reviewed and can no longer be edited.');
+  const { action } = req.body as { action: 'hint' | 'alternative' | 'skip' };
+  const result = await helpWithQuestion(app, Number(req.params.position), action);
+  if (!result) throw new HttpError(404, 'NOT_FOUND', 'There is no such question.');
+  if (result.error) throw new HttpError(409, 'HELP_UNAVAILABLE', result.error);
+  const fresh = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
+  res.json({ hint: result.hint ?? null, skips_left: Math.max(0, MAX_SKIPS - fresh.alfred_skips), ...(await interviewState(fresh)) });
 };

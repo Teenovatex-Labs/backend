@@ -6,6 +6,7 @@ import { createNotification } from '../notify.js';
 import { send } from '../resend.js';
 import { generate, hasProviders } from '../pet/providers.js';
 import { ageOn } from '../age.js';
+import { CRITERIA, CRITERION_GUIDE, RUBRIC, type Criterion } from '../rubric.js';
 import { FOCUS, TOTAL_QUESTIONS, covered as coveredBy, enoughEvidence, nextCriterion, pickFallback } from './questions.js';
 import { acceptSpec, composeAnswer, type AnswerInput, type Format, type Spec } from './formats.js';
 import { PROMPT_VERSION, SYSTEM, userPrompt } from './persona.js';
@@ -112,7 +113,7 @@ export const interviewState = async (app: Application) => {
     complete,
     // Someone who flagged something may submit what they have, so a worried applicant is never trapped.
     can_submit: complete || (flagged && answered.length >= 1),
-    questions: answers.map((a) => ({ position: a.position, question: a.question_text, format: a.format, spec: specOf(a), answer: textOf(a) || null })),
+    questions: answers.map((a) => ({ position: a.position, alternatives_left: Math.max(0, MAX_ALTERNATIVES - a.alternatives), question: a.question_text, format: a.format, spec: specOf(a), answer: textOf(a) || null })),
   };
 };
 
@@ -151,4 +152,54 @@ export const saveAnswer = async (app: Application, position: number, input: Answ
   await audit(null, 'application.safeguarding_flag', { type: 'application', id: app.id }, { reference: app.reference, position });
   await alertSafeguarding(app.reference);
   return { safety: SAFETY_REPLY };
+};
+
+/** The most times an applicant may ask for a different question, per question, and skip questions overall. */
+export const MAX_ALTERNATIVES = 2;
+export const MAX_SKIPS = 2;
+
+export type HelpAction = 'hint' | 'alternative' | 'skip';
+
+/**
+ * Help on the question still waiting for an answer. A hint is the same for everyone (the rubric's own examples), so it
+ * can never leak how answers are judged. A different question and a skip swap the open question for another bank
+ * question; skipping moves to a quality that has not been covered yet. Both are capped so the interview stays whole.
+ */
+export const helpWithQuestion = async (app: Application, position: number, action: HelpAction): Promise<{ hint?: string; error?: string } | null> => {
+  const answers = await rows(app.id);
+  const row = answers.find((a) => a.position === position);
+  if (!row) return null;
+  if (textOf(row) !== '') return { error: 'You have already answered this one. Edit your answer instead.' };
+  const criterion = (row.criterion ?? 'initiative_action') as Criterion;
+
+  if (action === 'hint') {
+    const g = CRITERION_GUIDE[criterion];
+    await prisma.applicationAnswer.update({ where: { id: row.id }, data: { hint_used: true } });
+    return { hint: `Not sure where to start? Think of a time you did something like: ${g.examples.slice(0, 3).join('; ').toLowerCase()}. A small, real example is plenty.` };
+  }
+
+  const used = answers.map((a) => a.question_key);
+  const age = ageOn(app.birth_date);
+  const swap = async (target: Criterion) => {
+    const f = pickFallback(target, used, { age, interests: app.interests, allowFormats: false });
+    if (!f) return false;
+    await prisma.applicationAnswer.update({ where: { id: row.id }, data: { question_key: f.key, question_text: f.text, source: 'fallback', prompt_version: null, format: 'text', spec: Prisma.JsonNull, criterion: target, hint_used: false, alternatives: action === 'alternative' ? { increment: 1 } : 0 } });
+    return true;
+  };
+
+  if (action === 'alternative') {
+    if (row.alternatives >= MAX_ALTERNATIVES) return { error: 'You have used the different-question options for this one. Answer it your own way, or skip it.' };
+    return (await swap(criterion)) ? {} : { error: 'There is no other question for this one right now.' };
+  }
+
+  if (app.alfred_skips >= MAX_SKIPS) return { error: `You can skip up to ${MAX_SKIPS} questions. Give this one a go, even a short answer helps.` };
+  const have = new Set(coveredBy(answers.map((a) => ({ criterion: a.criterion, text: textOf(a) }))));
+  const options = CRITERIA.filter((c) => c !== criterion && !have.has(c) && !answers.some((a) => a.criterion === c)).sort((a, b) => RUBRIC[b] - RUBRIC[a]);
+  for (const target of options) {
+    if (await swap(target)) {
+      await prisma.application.update({ where: { id: app.id }, data: { alfred_skips: { increment: 1 } } });
+      return {};
+    }
+  }
+  return { error: 'There is nothing else to skip to. Give this one a go.' };
 };

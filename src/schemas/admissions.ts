@@ -90,3 +90,5 @@ export const answerSchema = z
     note: z.string().trim().max(600).optional(),
   })
   .refine((v) => v.answer !== undefined || v.choice !== undefined || v.value !== undefined, 'Write an answer first');
+
+export const helpSchema = z.object({ action: z.enum(['hint', 'alternative', 'skip']) });

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { answerQuestion, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
+import { answerQuestion, questionHelp, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
 import { confirmConsent, requestGuardian, showConsent, withdrawConsent } from '../controllers/guardian.js';
 import { addLink, listMine, removeAttachment, uploadImage } from '../controllers/applicationAttachments.js';
 import { requireApplicant } from '../middleware/applicant.js';
@@ -7,7 +7,7 @@ import { attachmentUpload } from '../middleware/upload.js';
 import { z } from 'zod';
 import { authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import { answerSchema, clarificationReplySchema, guardianSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
+import { answerSchema, clarificationReplySchema, guardianSchema, helpSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
 
 const router = Router();
 
@@ -22,6 +22,7 @@ router.get('/me', authLimiter, requireApplicant, getMyApplication);
 router.get('/interview', requireApplicant, getInterview);
 router.post('/interview/next', authLimiter, requireApplicant, nextQuestion);
 router.put('/interview/answers/:position', requireApplicant, validate(answerSchema), answerQuestion);
+router.post('/interview/:position/help', authLimiter, requireApplicant, validate(helpSchema), questionHelp);
 router.patch('/draft', requireApplicant, validate(updateDraftSchema), updateDraft);
 router.get('/attachments', requireApplicant, listMine);
 router.post('/attachments/image', authLimiter, requireApplicant, attachmentUpload.single('image'), uploadImage);
