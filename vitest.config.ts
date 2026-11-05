@@ -9,6 +9,6 @@ export default defineConfig({
     fileParallelism: false,
     testTimeout: 20_000,
     hookTimeout: 120_000,
-    env: { NODE_ENV: 'test' },
+    env: { NODE_ENV: 'test', REQUIRE_INVITATION: 'false' },
   },
 });
