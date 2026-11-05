@@ -4,15 +4,19 @@ import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 import { ageOn, MIN_AGE, toDbDate } from '../lib/age.js';
 import {
+  INVITE_DAYS,
   RETENTION_MS,
   createWithReference,
   findNextWindow,
   findOpenWindow,
+  newInvitation,
   newResumeToken,
   publicStatus,
   windowState,
 } from '../lib/admissions.js';
-import { sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
+import { audit } from '../lib/audit.js';
+import { hashToken } from '../lib/tokens.js';
+import { sendAcceptance, sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
 import { ANSWER_MAX, ensureNextQuestion, helpWithQuestion, interviewState, MAX_SKIPS, saveAnswer } from '../lib/alfred/interview.js';
 import { needsGuardian } from '../lib/guardian.js';
 import { createNotification } from '../lib/notify.js';
@@ -257,4 +261,51 @@ export const questionHelp = async (req: ApplicantRequest, res: Response): Promis
   if (result.error) throw new HttpError(409, 'HELP_UNAVAILABLE', result.error);
   const fresh = await prisma.application.findUniqueOrThrow({ where: { id: app.id } });
   res.json({ hint: result.hint ?? null, skips_left: Math.max(0, MAX_SKIPS - fresh.alfred_skips), ...(await interviewState(fresh)) });
+};
+
+const offerApp = async (token: string) => {
+  const app = await prisma.application.findUnique({ where: { waitlist_offer_hash: hashToken(token) } });
+  if (!app || (app.status !== 'waitlisted' && !app.waitlist_offer_response)) throw new HttpError(404, 'NOT_FOUND', 'This offer link is not valid.');
+  return app;
+};
+const offerState = (a: Application) =>
+  a.waitlist_offer_response ?? (a.waitlist_offer_expires_at && a.waitlist_offer_expires_at < new Date() ? 'expired' : 'pending');
+
+/** What the offer page shows. Says nothing about anyone else on the waitlist. */
+export const viewOffer = async (req: Request, res: Response): Promise<void> => {
+  const app = await offerApp(String(req.params.token));
+  res.json({ state: offerState(app), expires_at: app.waitlist_offer_expires_at?.toISOString() ?? null, first_name: app.full_name.split(' ')[0] });
+};
+
+/** Accepting turns the waitlist place into an acceptance and sends the usual single-use invitation. */
+export const respondToOffer = async (req: Request, res: Response): Promise<void> => {
+  const app = await offerApp(String(req.params.token));
+  const state = offerState(app);
+  if (state === 'expired') throw new HttpError(410, 'OFFER_EXPIRED', 'This offer has expired, and the place has gone to the next person.');
+  if (state !== 'pending') throw new HttpError(409, 'ALREADY_ANSWERED', 'You have already answered this offer.');
+  const { accept } = req.body as { accept: boolean };
+  const now = new Date();
+  const invite = accept ? newInvitation() : null;
+  // The answer is claimed first so a double click can never create two invitations.
+  const claimed = await prisma.$transaction(async (tx) => {
+    const c = await tx.application.updateMany({
+      where: { id: app.id, waitlist_offer_response: null },
+      data: accept
+        ? { waitlist_offer_response: 'accepted', status: 'accepted', decided_at: now, retention_delete_at: null }
+        : { waitlist_offer_response: 'declined', status: 'declined', decided_at: now, retention_delete_at: new Date(now.getTime() + RETENTION_MS) },
+    });
+    if (c.count === 0) return false;
+    if (invite) await tx.invitation.create({ data: { token_hash: invite.hash, email: app.email, role: 'member', source: 'application', application_id: app.id, expires_at: invite.expires } });
+    return true;
+  });
+  if (!claimed) throw new HttpError(409, 'ALREADY_ANSWERED', 'You have already answered this offer.');
+  await audit(null, 'application.waitlist_response', { type: 'application', id: app.id }, { accept });
+  if (invite) {
+    try {
+      await sendAcceptance(app.email, invite.token, INVITE_DAYS);
+    } catch (err) {
+      console.error('Acceptance email failed:', err);
+    }
+  }
+  res.json({ accepted: accept });
 };

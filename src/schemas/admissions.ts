@@ -92,3 +92,5 @@ export const answerSchema = z
   .refine((v) => v.answer !== undefined || v.choice !== undefined || v.value !== undefined, 'Write an answer first');
 
 export const helpSchema = z.object({ action: z.enum(['hint', 'alternative', 'skip']) });
+
+export const offerResponseSchema = z.object({ accept: z.boolean() });

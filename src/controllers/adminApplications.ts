@@ -8,8 +8,10 @@ import { can } from '../lib/permissions.js';
 import { config } from '../config.js';
 import { gatherEvidence, suggestionsVisible } from '../lib/alfred/evidence.js';
 import { CRITERIA, CRITERION_GUIDE, INSUFFICIENT_EVIDENCE, RATING_GUIDE, RUBRIC, weightedScore, type Criterion, type Rating } from '../lib/rubric.js';
-import { RETENTION_MS } from '../lib/admissions.js';
-import { sendClarificationRequest } from '../lib/admissionsEmail.js';
+import { OFFER_HOURS, RETENTION_MS } from '../lib/admissions.js';
+import { hashToken } from '../lib/tokens.js';
+import crypto from 'node:crypto';
+import { sendClarificationRequest, sendWaitlistOffer } from '../lib/admissionsEmail.js';
 import { summarise } from '../lib/alfred/summary.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
@@ -24,7 +26,16 @@ const find = async (id: string) => {
   return app;
 };
 
-const summary = (a: { id: string; reference: string; status: ApplicationStatus; full_name: string; birth_date: Date; country: string; submitted_at: Date | null; claimed_by: string | null; window_id: string }) => ({
+type OfferFields = { waitlist_offer_sent_at?: Date | null; waitlist_offer_expires_at?: Date | null; waitlist_offer_response?: string | null };
+/** pending, accepted, declined or expired. An unanswered offer past its deadline reads as expired without waiting for a job. */
+const offerOf = (a: OfferFields) => {
+  if (!a.waitlist_offer_sent_at) return null;
+  const expired = !a.waitlist_offer_response && a.waitlist_offer_expires_at != null && a.waitlist_offer_expires_at < new Date();
+  return { sent_at: a.waitlist_offer_sent_at.toISOString(), expires_at: a.waitlist_offer_expires_at?.toISOString() ?? null, state: a.waitlist_offer_response ?? (expired ? 'expired' : 'pending') };
+};
+
+const summary = (a: { id: string; reference: string; status: ApplicationStatus; full_name: string; birth_date: Date; country: string; submitted_at: Date | null; claimed_by: string | null; window_id: string } & OfferFields) => ({
+  waitlist_offer: offerOf(a),
   id: a.id, reference: a.reference, status: a.status, full_name: a.full_name, age: ageOn(a.birth_date),
   country: a.country, submitted_at: a.submitted_at?.toISOString() ?? null, claimed_by: a.claimed_by, window_id: a.window_id,
 });
@@ -223,4 +234,28 @@ export const askClarification = async (req: AuthRequest, res: Response): Promise
   }
   await audit(req.userId!, 'application.clarification', { type: 'application', id: app.id });
   res.status(201).json({ id: c.id, due_at: c.due_at.toISOString() });
+};
+
+/**
+ * Offers a waitlisted applicant a place, by hand. They get a private link and 72 hours to answer. Only released
+ * waitlist decisions can be offered a place, and only one offer can be open at a time.
+ */
+export const offerWaitlistPlace = async (req: AuthRequest, res: Response): Promise<void> => {
+  const app = await find(String(req.params.id));
+  if (app.status !== 'waitlisted' || !app.published_at) throw new HttpError(409, 'NOT_WAITLISTED', 'Only a published waitlist decision can be offered a place.');
+  const current = offerOf(app);
+  if (current?.state === 'pending') throw new HttpError(409, 'OFFER_OPEN', 'There is already an open offer for this person.');
+  const token = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + OFFER_HOURS * 3_600_000);
+  await prisma.application.update({
+    where: { id: app.id },
+    data: { waitlist_offer_hash: hashToken(token), waitlist_offer_sent_at: new Date(), waitlist_offer_expires_at: expires, waitlist_offer_response: null },
+  });
+  try {
+    await sendWaitlistOffer(app.email, token, OFFER_HOURS);
+  } catch (err) {
+    console.error('Waitlist offer email failed:', err);
+  }
+  await audit(req.userId!, 'application.waitlist_offer', { type: 'application', id: app.id });
+  res.status(201).json({ expires_at: expires.toISOString() });
 };
