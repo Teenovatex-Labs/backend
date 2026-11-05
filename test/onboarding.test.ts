@@ -22,26 +22,29 @@ describe('onboarding', () => {
     const { auth } = await newcomer();
     const res = await get(auth);
     expect(res.body.status).toBe('onboarding');
-    expect(res.body.steps.map((s: { key: string }) => s.key)).toEqual(['conduct', 'whatsapp', 'profile', 'hcb']);
+    expect(res.body.steps.map((s: { key: string }) => s.key)).toEqual(['welcome', 'conduct', 'safeguarding', 'profile', 'whatsapp', 'intro', 'hcb']);
     expect(res.body.steps.find((s: { key: string }) => s.key === 'hcb').link).toBe('https://hcb.hackclub.com/donations/start/teenovatex');
     expect(res.body.overdue).toBe(false);
   });
 
   it('activates the member once every required step is done, and not before', async () => {
     const { auth, user } = await newcomer();
-    await confirm(auth, 'conduct');
-    await confirm(auth, 'hcb');
+    for (const s of ['welcome', 'conduct', 'safeguarding', 'hcb']) await confirm(auth, s);
     expect((await confirm(auth, 'whatsapp')).body.status).toBe('onboarding');
     await prisma.user.update({ where: { id: user.id }, data: { bio: 'I like building small web apps.' } });
+    expect((await get(auth)).body.status).toBe('onboarding');
+    const intro = await request(app).put('/api/v1/onboarding/intro').set(auth).send({ intro: 'I build small web apps and want to learn design.' });
+    expect(intro.body.whatsapp_text).toMatch(/^Hi everyone, I'm Test\./);
     const done = await get(auth);
     expect(done.body.status).toBe('active');
     expect(done.body.due_at).toBeNull();
     expect(await prisma.membershipEvent.count({ where: { user_id: user.id, to_status: 'active' } })).toBe(1);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).intro_published_at).not.toBeNull();
   });
 
   it('keeps a member in onboarding until they confirm joining HCB', async () => {
-    const { auth } = await makeUser({ membership_status: 'onboarding', bio: 'Long enough bio text' });
-    await confirm(auth, 'conduct');
+    const { auth } = await makeUser({ membership_status: 'onboarding', bio: 'Long enough bio text', intro: 'A long enough introduction to the group.' });
+    for (const s of ['welcome', 'conduct', 'safeguarding']) await confirm(auth, s);
     expect((await confirm(auth, 'whatsapp')).body.status).toBe('onboarding');
     expect((await confirm(auth, 'hcb')).body.status).toBe('active');
   });
@@ -81,5 +84,18 @@ describe('cleanLink', () => {
     expect(cleanLink('https://x.org/a?b=1&utm_source=z&fbclid=q')).toBe('https://x.org/a?b=1');
     expect(cleanLink(undefined)).toBeNull();
     expect(cleanLink('not a url')).toBeNull();
+  });
+
+  it('suggests a bio from the application and only saves what the member sends', async () => {
+    const { auth, user } = await newcomer();
+    const w = await prisma.applicationWindow.create({ data: { opens_at: new Date(Date.now() - 9e8), closes_at: new Date(Date.now() - 8e8), decisions_publish_at: new Date(Date.now() - 7e8), form_version: 'v1' } });
+    await prisma.application.create({
+      data: { reference: 'TX-2026-00077', window_id: w.id, status: 'accepted', submitted_at: new Date(), email: user.email, full_name: 'Test Member', birth_date: new Date('2010-01-01'), country: 'NG', city: 'Lagos', whatsapp: '+234', education_level: 'secondary', interests: ['robots', 'music'], current_skills: [], learning_goals: ['python'], resume_token_hash: 'h'.repeat(64), resume_expires_at: new Date() },
+    });
+    const s = await request(app).get('/api/v1/onboarding/profile-suggestion').set(auth);
+    expect(s.body.bio).toBe("I'm Test. I'm into robots and music. I want to learn python.");
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).bio).toBeNull();
+    expect((await request(app).put('/api/v1/onboarding/bio').set(auth).send({ bio: s.body.bio })).status).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).bio).toBe(s.body.bio);
   });
 });
