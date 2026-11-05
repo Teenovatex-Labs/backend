@@ -66,7 +66,7 @@ const buildSchema = (isProduction: boolean) => {
       ADMIN_EMAILS: z.string().optional(),
       // "true" closes open sign-up: a new account then needs an invitation. Off by default so
       // deploying the code does not lock anyone out before the first intake has run.
-      REQUIRE_INVITATION: z.string().default('false'),
+      REQUIRE_INVITATION: z.string().default('true'),
       // Applicants younger than this need a parent or guardian to confirm after acceptance.
       // A setting because the right age depends on the law where the member lives; counsel decides.
       // Where new members are sent during onboarding. Unset means that step shows no link.
