@@ -16,6 +16,9 @@ model User {
   google_id     String?   @unique
   avatar_url    String?
   bio           String?
+  // Written during onboarding, shared in the community WhatsApp group, and published when they become active.
+  intro              String?
+  intro_published_at DateTime?
   social_links  Json?
   // Hundredths of a point in the CURRENT season (150 = 1.5). See src/lib/pointsMath.ts.
   points        Int       @default(0)
