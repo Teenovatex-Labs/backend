@@ -40,6 +40,12 @@ const buildSchema = (isProduction: boolean) => {
       CLOUDINARY_CLOUD_NAME: z.string().optional(),
       CLOUDINARY_API_KEY: z.string().optional(),
       CLOUDINARY_API_SECRET: z.string().optional(),
+      // S3-compatible storage (Neon storage) for private PDFs. All five must be set to switch it on.
+      S3_ENDPOINT: z.string().url().optional(),
+      S3_REGION: z.string().optional(),
+      S3_BUCKET: z.string().optional(),
+      S3_ACCESS_KEY_ID: z.string().optional(),
+      S3_SECRET_ACCESS_KEY: z.string().optional(),
       // Alfred's brain: free-tier providers tried in order, each with any number of keys
       // (comma-separated) so a spare key takes over when one is rate-limited.
       SENTRY_DSN: z.string().url().optional(),
@@ -120,6 +126,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     },
     sentryDsn: c.SENTRY_DSN,
     push: { publicKey: c.VAPID_PUBLIC_KEY, privateKey: c.VAPID_PRIVATE_KEY, subject: c.VAPID_SUBJECT },
+    s3: { endpoint: c.S3_ENDPOINT, region: c.S3_REGION ?? 'auto', bucket: c.S3_BUCKET, accessKeyId: c.S3_ACCESS_KEY_ID, secretAccessKey: c.S3_SECRET_ACCESS_KEY },
     cloudinary: {
       cloudName: c.CLOUDINARY_CLOUD_NAME,
       apiKey: c.CLOUDINARY_API_KEY,

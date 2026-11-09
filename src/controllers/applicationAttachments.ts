@@ -2,8 +2,9 @@ import type { Response } from 'express';
 import { prisma } from '../db.js';
 import { audit } from '../lib/audit.js';
 import { checkPdf, cleanImage } from '../lib/attachments.js';
+import { pdfLink, removePdf, storePdf } from '../lib/pdfStore.js';
 import { HttpError } from '../lib/errors.js';
-import { deletePrivateImage, deletePrivatePdf, signedImageUrl, signedPdfUrl, uploadPrivateImage, uploadPrivatePdf } from '../middleware/upload.js';
+import { deletePrivateImage, signedImageUrl, uploadPrivateImage } from '../middleware/upload.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
@@ -51,7 +52,7 @@ export const uploadPdf = async (req: ApplicantRequest & { file?: Express.Multer.
     throw new HttpError(409, 'ATTACHMENT_LIMIT', `You can add up to ${MAX_PDFS} PDFs.`);
   }
   checkPdf(req.file.buffer);
-  const { public_id } = await uploadPrivatePdf(req.file.buffer, 'applications');
+  const public_id = await storePdf(req.file.buffer);
   const row = await prisma.applicationAttachment.create({
     data: { application_id: app.id, kind: 'pdf', public_id, filename: (req.file.originalname || 'document.pdf').slice(0, 80), mime_type: 'application/pdf', size_bytes: req.file.buffer.length, scan_status: 'checked' },
   });
@@ -73,7 +74,7 @@ export const removeAttachment = async (req: ApplicantRequest, res: Response): Pr
   const a = await prisma.applicationAttachment.findFirst({ where: { id: String(req.params.id), application_id: app.id } });
   if (!a) throw new HttpError(404, 'NOT_FOUND', 'Attachment not found');
   await prisma.applicationAttachment.delete({ where: { id: a.id } });
-  if (a.public_id) await (a.kind === 'pdf' ? deletePrivatePdf : deletePrivateImage)(a.public_id);
+  if (a.public_id) await (a.kind === 'pdf' ? removePdf : deletePrivateImage)(a.public_id);
   res.json({ ok: true });
 };
 
@@ -82,5 +83,5 @@ export const reviewerLink = async (req: AuthRequest, res: Response): Promise<voi
   const a = await prisma.applicationAttachment.findFirst({ where: { id: String(req.params.attId), application_id: String(req.params.id), kind: { in: ['image', 'pdf'] } } });
   if (!a?.public_id) throw new HttpError(404, 'NOT_FOUND', 'Attachment not found');
   await audit(req.userId!, 'application.attachment_view', { type: 'application', id: a.application_id }, { attachment: a.id });
-  res.json({ url: a.kind === 'pdf' ? signedPdfUrl(a.public_id) : signedImageUrl(a.public_id), kind: a.kind });
+  res.json({ url: a.kind === 'pdf' ? await pdfLink(a.public_id, a.filename) : signedImageUrl(a.public_id), kind: a.kind });
 };
