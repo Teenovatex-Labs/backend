@@ -1,6 +1,6 @@
 # Safeguarding: roles, admissions, pairing and badges
 
-**Status: DRAFT. Not in force until the owner signs off (see "Sign-off" at the end).**
+**Status: owner signed off 2026-11-09. Counsel items and the deputy lead are still open (see "Sign-off" at the end).**
 Owner and safeguarding lead: Anas Abubakar. This document extends `docs/SAFEGUARDING.md` (images in team chats). Where the two disagree, the stricter rule wins.
 
 TeenovateX members are teenagers (13+). Every rule below is enforced on the server. The user interface may hide things, but it is never the control.
@@ -24,11 +24,13 @@ TeenovateX members are teenagers (13+). Every rule below is enforced on the serv
 - A tutor can message only students enrolled in their own class, only inside the class chat. Moderators can review class chats. **No private messages from tutors to students.**
 - A tutor sees enrolled students' names, attendance and progress for their own classes. Not birth dates, locations, email or other classes.
 - A tutor never sees other members, applications, or reports.
+- **Class link (owner decision 2026-11-09):** each class has a meeting link that the host (tutor) adds. Links are allowed in class chats. A second person may join a class session. Open item: whether a second person is required when an adult tutor teaches minors.
+- **Tutor age (owner decision 2026-11-09):** a tutor can be any age, as long as they are an accepted member (13+). A tutor under the guardian threshold needs guardian confirmation like any member. Age does not change the rules above: class chat only, no private messages to students.
 
 ## C. Vetting and approval of tutors and partners
 1. The candidate is invited by an admin (single-use, expiring invitation tied to their email).
 2. An admin records the checks done (identity, references, and any background check the owner requires) in the audit log.
-3. A second admin approves. The role is applied only when the invitation is accepted with the verified email.
+3. A second admin approves (owner accepted two-admin approval, 2026-11-09; the owner names the second admin). The role is applied only when the invitation is accepted with the verified email.
 4. An admin can suspend or revoke at any time. Every step is audited.
 Open item: the exact background check required in each country (owner and counsel).
 
@@ -78,7 +80,7 @@ Open item: the exact background check required in each country (owner and counse
 - Open items: counsel confirms this is allowed for minors' data; the owner checks the providers' terms for child data.
 
 ## Sign-off
-- [ ] Owner (Anas Abubakar): __________  date: ________
+- [x] Owner (Anas Abubakar): signed in the project thread  date: 2026-11-09
 - [ ] Counsel: reporting channel and retention (section E): ________
 - [ ] Counsel: guardian age threshold per country, and AI processing before consent (section G, K): ________
 - [ ] Named deputy safeguarding lead (section E): ________
