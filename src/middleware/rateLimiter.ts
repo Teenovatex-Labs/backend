@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Request } from 'express';
 import rateLimit, { type Options } from 'express-rate-limit';
 import { config } from '../config.js';
@@ -41,6 +42,31 @@ export const authLimiter = limiter({
   windowMs: 15 * 60_000,
   max: 10,
   message: { error: 'Too many attempts — try again later', code: 'RATE_LIMITED' },
+});
+
+// Applicants carry an emailed link instead of an account, and a real applicant makes dozens of calls: loading the
+// portal, one per Alfred question, hints, uploads. Sharing the 10-per-15-minutes login limit locked people out
+// mid-application. Two limits instead:
+//  - failures only, per network: guessing links is what needs stopping, and a valid session is not counted;
+//  - actions, per link: a generous ceiling so one link cannot be used to hammer the AI quota or storage.
+export const applicantFailureLimiter = limiter({
+  windowMs: 15 * 60_000,
+  max: 30,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many attempts — try again later', code: 'RATE_LIMITED' },
+});
+
+const byLink = (req: Request) => {
+  const header = req.headers.authorization;
+  const token = header?.startsWith('Bearer ') ? header.slice(7) : '';
+  return token ? `link:${crypto.createHash('sha256').update(token).digest('hex')}` : `ip:${req.ip ?? 'unknown'}`;
+};
+
+export const applicantActionLimiter = limiter({
+  windowMs: 15 * 60_000,
+  max: 200,
+  keyGenerator: byLink,
+  message: { error: 'You are going very fast. Take a breath and try again in a few minutes.', code: 'RATE_LIMITED' },
 });
 
 // Verifying a 6-digit code (1M possibilities) — the account itself already
