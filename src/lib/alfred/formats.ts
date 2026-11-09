@@ -1,4 +1,4 @@
-export const FORMATS = ['text', 'choice', 'multi', 'scale', 'slider'] as const;
+export const FORMATS = ['text', 'choice', 'multi', 'scale', 'slider', 'rank'] as const;
 export type Format = (typeof FORMATS)[number];
 
 /** What an applicant is shown for a non-text question. Typed answers have no spec. */
@@ -13,10 +13,10 @@ const RANGE: Record<'scale' | 'slider', [number, number]> = { scale: [1, 5], sli
 /** Checks what the AI proposed for a question's format, and returns a safe spec or null if it should be a typed question. */
 export const acceptSpec = (format: unknown, raw: { options?: unknown; low?: unknown; high?: unknown }): { format: Format; spec: Spec | null } | null => {
   if (format === undefined || format === 'text') return { format: 'text', spec: null };
-  if (format === 'choice' || format === 'multi') {
+  if (format === 'choice' || format === 'multi' || format === 'rank') {
     if (!Array.isArray(raw.options)) return null;
     const options = raw.options.map((o) => label(o, 70));
-    if (options.length < 2 || options.length > 6 || options.some((o) => !o) || new Set(options).size !== options.length) return null;
+    if (options.length < (format === 'rank' ? 3 : 2) || options.length > (format === 'rank' ? 5 : 6) || options.some((o) => !o) || new Set(options).size !== options.length) return null;
     return { format, spec: { options: options as string[] } };
   }
   if (format === 'scale' || format === 'slider') {
@@ -41,6 +41,13 @@ export const composeAnswer = (format: string, spec: Spec | null, input: AnswerIn
     if (picked.length === 0 || picked.some((p) => !options.includes(p))) return { ok: false, message: 'Pick one of the options.' };
     if (format === 'choice' && picked.length !== 1) return { ok: false, message: 'Pick just one.' };
     return { ok: true, text: [picked.join('; '), note].filter(Boolean).join(' — '), json: { text: [picked.join('; '), note].filter(Boolean).join(' — '), choice: picked, note } };
+  }
+  if (format === 'rank') {
+    const options = spec?.options ?? [];
+    const order = input.choice ?? [];
+    if (order.length !== options.length || new Set(order).size !== order.length || order.some((p) => !options.includes(p))) return { ok: false, message: 'Put every option in your order.' };
+    const text = [order.map((o, i) => `${i + 1}. ${o}`).join('; '), note].filter(Boolean).join(' — ');
+    return { ok: true, text, json: { text, choice: order, note } };
   }
   if (format === 'scale' || format === 'slider') {
     const min = spec?.min ?? 0;

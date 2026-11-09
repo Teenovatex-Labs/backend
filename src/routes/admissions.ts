@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { answerQuestion, questionHelp, respondToOffer, viewOffer, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
+import { answerQuestion, questionHelp, setTone, respondToOffer, viewOffer, getInterview, nextQuestion, currentWindow, getMyApplication, lookupStatus, replyToClarification, requestReminder, startApplication, submitApplication, updateDraft, withdrawApplication } from '../controllers/admissions.js';
 import { confirmConsent, requestGuardian, showConsent, withdrawConsent } from '../controllers/guardian.js';
 import { addLink, listMine, removeAttachment, uploadImage, uploadPdf } from '../controllers/applicationAttachments.js';
 import { requireApplicant } from '../middleware/applicant.js';
@@ -7,7 +7,7 @@ import { attachmentUpload, pdfUpload } from '../middleware/upload.js';
 import { z } from 'zod';
 import { applicantActionLimiter, applicantFailureLimiter, authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
-import { answerSchema, clarificationReplySchema, guardianSchema, helpSchema, offerResponseSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
+import { answerSchema, clarificationReplySchema, guardianSchema, helpSchema, toneSchema, offerResponseSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
 
 const router = Router();
 
@@ -24,6 +24,7 @@ router.post('/offer/:token/respond', authLimiter, validate(offerResponseSchema),
 router.get('/interview', applicantFailureLimiter, requireApplicant, getInterview);
 router.post('/interview/next', applicantFailureLimiter, applicantActionLimiter, requireApplicant, nextQuestion);
 router.put('/interview/answers/:position', requireApplicant, validate(answerSchema), answerQuestion);
+router.put('/interview/tone', applicantActionLimiter, requireApplicant, validate(toneSchema), setTone);
 router.post('/interview/:position/help', applicantFailureLimiter, applicantActionLimiter, requireApplicant, validate(helpSchema), questionHelp);
 router.patch('/draft', requireApplicant, validate(updateDraftSchema), updateDraft);
 router.get('/attachments', requireApplicant, listMine);

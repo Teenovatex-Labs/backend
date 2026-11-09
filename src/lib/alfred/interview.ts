@@ -8,9 +8,10 @@ import { generate, hasProviders } from '../pet/providers.js';
 import { ageOn } from '../age.js';
 import { windowIsTest } from '../admissions.js';
 import { CRITERIA, CRITERION_GUIDE, RUBRIC, type Criterion } from '../rubric.js';
-import { FOCUS, TOTAL_QUESTIONS, covered as coveredBy, enoughEvidence, nextCriterion, pickFallback } from './questions.js';
+import { FOCUS, TOTAL_QUESTIONS, covered as coveredBy, enoughEvidence, focusFor, nextCriterion, pickFallback } from './questions.js';
+import { critique, describe, parseDraft, type Context, type Reaction } from './critique.js';
 import { acceptSpec, composeAnswer, type AnswerInput, type Format, type Spec } from './formats.js';
-import { PROMPT_VERSION, SYSTEM, userPrompt } from './persona.js';
+import { PROMPT_VERSION, SYSTEM, TONES, userPrompt, type Tone } from './persona.js';
 import { SAFETY_REPLY, isSensitive } from './safety.js';
 
 const textOf = (a: Pick<ApplicationAnswer, 'answer'>) => {
@@ -29,23 +30,101 @@ export type Generated = { text: string; format: Format; spec: Spec | null };
 
 /** A usable AI question: short, a real question, nothing that asks for contact details or links, and a valid format. */
 export const acceptGenerated = (raw: string): Generated | null => {
-  try {
-    const j = JSON.parse(raw) as { question?: unknown; format?: unknown; options?: unknown; low?: unknown; high?: unknown };
-    if (typeof j.question !== 'string') return null;
-    const t = j.question.trim();
-    if (t.length < 15 || t.length > 340 || !t.includes('?')) return null;
-    if (/https?:|www\.|@|\d{7,}/i.test(t)) return null;
-    const f = acceptSpec(j.format, j);
-    return f ? { text: t, ...f } : null;
-  } catch {
-    return null;
-  }
+  const d = parseDraft(raw);
+  if (!d) return null;
+  const t = d.question;
+  if (t.length < 15 || t.length > 340 || !t.includes('?')) return null;
+  if (/https?:|www\.|@|\d{7,}/i.test(t)) return null;
+  const f = acceptSpec(d.spec.format, d.spec.raw);
+  return f ? { text: t, ...f } : null;
 };
 
 /** Just the question text, for callers that do not care about its format. */
 export const acceptQuestion = (raw: string): string | null => acceptGenerated(raw)?.text ?? null;
 
 const aiAllowed = (answers: ApplicationAnswer[]) => config.admissionsAiEnabled && hasProviders() && !hasSensitiveAnswer(answers);
+
+const signalsOf = (a: Pick<ApplicationAnswer, 'signals'>): string[] => (Array.isArray(a.signals) ? (a.signals as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+const evidenceOf = (answers: ApplicationAnswer[]) => answers.map((a) => ({ criterion: a.criterion, text: textOf(a), signals: signalsOf(a) }));
+
+/** How they write, in plain words, so Alfred can match their register. This steers wording only and is never stored or scored. */
+export const styleOf = (texts: string[]): string => {
+  const t = texts.filter(Boolean);
+  if (!t.length) return 'not enough yet';
+  const avg = t.reduce((n, x) => n + x.trim().split(/\s+/).length, 0) / t.length;
+  const notes = [avg < 7 ? 'very short answers' : avg > 40 ? 'long detailed answers' : 'medium answers'];
+  if (/\p{Extended_Pictographic}|\b(lol|lmao|haha+)\b/iu.test(t.join(' '))) notes.push('uses emoji or laughs, jokes around');
+  return notes.join('; ');
+};
+
+const NO_EXPERIENCE = /\b(haven'?t|have not|never|not yet|no)\s+(really\s+)?(built|made|created|done|started|worked on|had)\b|\bnothing (yet|built)\b|\bno projects?\b/i;
+
+type Turn = { text: string; format: Format; spec: Spec | null; reaction: Reaction | null; mode: 'new' | 'follow_up'; shows: Criterion[] };
+
+/**
+ * One AI turn: a reaction to the last answer (optional) and the next question. The draft goes through the quality gate
+ * (critique.ts). A hard problem earns one retry with the reasons spelled out, then the fixed bank takes over. A soft problem
+ * only costs Alfred his reaction. Returns null when the bank should be used.
+ */
+const writeTurn = async (app: Application, answers: ApplicationAnswer[], position: number, focus: Criterion, covered: Criterion[], allowFormats: boolean): Promise<Turn | null> => {
+  const texts = answers.map(textOf);
+  const last = answers[answers.length - 1];
+  const tone = (TONES as readonly string[]).includes(app.alfred_tone) ? (app.alfred_tone as Tone) : 'balanced';
+  const uncovered = CRITERIA.filter((c) => !covered.includes(c)).length;
+  const allowFollowUp = !!last && textOf(last).length >= 15 && TOTAL_QUESTIONS - answers.length - 1 >= uncovered && answers.slice(-2).filter((a) => a.kind === 'follow_up').length < 2;
+  const noExperience = texts.some((t) => NO_EXPERIENCE.test(t));
+  const ctx: Context = {
+    past: answers.map((a) => ({ question: a.question_text, reaction: a.lead_in_text ? `${a.lead_in_type ?? ''} ${a.lead_in_text}` : null, answer: textOf(a) })),
+    tone,
+    serious: last?.lead_in_type === 'serious',
+    noExperience,
+    beginner: app.skill_level === 'beginner',
+    allowFollowUp,
+    first: position === 1,
+  };
+  const profile = { age: ageOn(app.birth_date), skill_level: app.skill_level, allowFormats, allowFollowUp, tone, style: styleOf(texts), noExperience };
+  const history = answers.map((a) => ({ question: a.question_text, answer: textOf(a), reaction: a.lead_in_text }));
+  const started = Date.now();
+
+  type Got = { d: NonNullable<ReturnType<typeof parseDraft>>; f: NonNullable<ReturnType<typeof acceptSpec>> };
+  const attempt = async (avoid: string[]): Promise<Got | null> => {
+    const box: { got: Got | null } = { got: null };
+    await generate(
+      { system: SYSTEM, user: userPrompt(FOCUS[focus], history, app.interests, covered.map((c) => FOCUS[c].split(':')[0]!), profile, avoid) },
+      (t) => {
+        const d = parseDraft(t);
+        const f = d ? acceptSpec(d.spec.format, d.spec.raw) : null;
+        if (!d || !f) return false;
+        box.got = { d, f };
+        return true;
+      },
+      fetch,
+      { maxTokens: 500, temperature: 0.8 },
+    );
+    return box.got;
+  };
+
+  const check = (g: Got) => {
+    const problems = critique(g.d, ctx);
+    if (!allowFormats && g.f.format !== 'text') problems.push({ level: 'hard', code: 'format', message: 'Cards are not allowed this turn; ask a typed question.' });
+    return problems;
+  };
+
+  let g = await attempt([]);
+  if (!g) return null;
+  let problems = check(g);
+  if (problems.some((p) => p.level === 'hard') && Date.now() - started < 8000) {
+    const retry = await attempt(describe(problems)).catch(() => null);
+    if (retry) {
+      g = retry;
+      problems = check(g);
+    }
+  }
+  if (problems.some((p) => p.level === 'hard')) return null;
+  // Soft problems cost Alfred his reaction, not the question.
+  const reaction = problems.length === 0 ? g.d.reaction : null;
+  return { text: g.d.question, format: g.f.format, spec: g.f.spec, reaction: position === 1 ? null : reaction, mode: g.d.mode, shows: g.d.shows };
+};
 
 /** Writes the next question (once). Safe to call twice: the second call returns the same row. */
 export const ensureNextQuestion = async (app: Application): Promise<ApplicationAnswer | null> => {
@@ -57,40 +136,63 @@ export const ensureNextQuestion = async (app: Application): Promise<ApplicationA
   if (hasSensitiveAnswer(answers)) return null;
 
   // Alfred stops once every criterion has real evidence and the minimum has been asked.
-  const evidence = answers.map((a) => ({ criterion: a.criterion, text: textOf(a) }));
+  const evidence = evidenceOf(answers);
   if (enoughEvidence(evidence)) return null;
 
   const position = answers.length + 1;
-  const criterion = nextCriterion(position, evidence);
   const used = answers.map((a) => a.question_key);
   const age = ageOn(app.birth_date);
   const covered = coveredBy(evidence);
   // Taps and sliders are a change of pace, never the first question and never two in a row.
   const allowFormats = position > 1 && (answers[answers.length - 1]?.format ?? 'text') === 'text';
-  let question: { key: string; text: string; source: 'ai' | 'fallback'; format: string; spec: Spec | null } | null = null;
+  let criterion: Criterion = focusFor(position, evidence);
+  let question: { key: string; text: string; source: 'ai' | 'fallback'; format: string; spec: Spec | null; reaction: Reaction | null; kind: 'new' | 'follow_up' } | null = null;
+  let shows: Criterion[] = [];
 
   if (aiAllowed(answers)) {
     try {
-      const history = answers.map((a) => ({ question: a.question_text, answer: textOf(a) }));
-      let accepted: Generated | null = null;
-      await generate({ system: SYSTEM, user: userPrompt(FOCUS[criterion], history, app.interests, covered.map((c) => FOCUS[c].split(':')[0]!), { age, skill_level: app.skill_level, allowFormats }) }, (t) => (accepted = acceptGenerated(t)) !== null, fetch, { maxTokens: 300, temperature: 0.7 });
-      const g = accepted as Generated | null;
-      if (g) question = { key: `ai-${position}`, text: g.text, source: 'ai', format: allowFormats ? g.format : 'text', spec: allowFormats ? g.spec : null };
+      const t = await writeTurn(app, answers, position, criterion, covered, allowFormats);
+      if (t) {
+        const follow = t.mode === 'follow_up' && position > 1;
+        // A follow-up stays on the thread it is digging into.
+        if (follow) criterion = (answers[answers.length - 1]!.criterion as Criterion | null) ?? criterion;
+        question = { key: `ai-${position}`, text: t.text, source: 'ai', format: t.format, spec: t.spec, reaction: t.reaction, kind: follow ? 'follow_up' : 'new' };
+        shows = t.shows;
+      }
     } catch {
       // Every provider failed or answered badly: the fixed bank takes over.
     }
   }
   if (!question) {
+    criterion = nextCriterion(position, evidence);
     const f = pickFallback(criterion, used, { age, interests: app.interests, allowFormats, preferFormats: allowFormats && (position === 3 || position === 5) });
     if (!f) return null;
     const format = f.format === 'scenario' ? 'text' : f.format;
-    question = { key: f.key, text: f.text, source: 'fallback', format, spec: f.spec ?? null };
+    question = { key: f.key, text: f.text, source: 'fallback', format, spec: f.spec ?? null, reaction: null, kind: 'new' };
   }
 
   try {
-    return await prisma.applicationAnswer.create({
-      data: { application_id: app.id, position, question_key: question.key, question_text: question.text, source: question.source, prompt_version: question.source === 'ai' ? PROMPT_VERSION : null, format: question.format, spec: question.spec ?? Prisma.JsonNull, criterion },
-    });
+    const last = answers[answers.length - 1];
+    const [created] = await prisma.$transaction([
+      prisma.applicationAnswer.create({
+        data: {
+          application_id: app.id,
+          position,
+          question_key: question.key,
+          question_text: question.text,
+          source: question.source,
+          prompt_version: question.source === 'ai' ? PROMPT_VERSION : null,
+          format: question.format,
+          spec: question.spec ?? Prisma.JsonNull,
+          criterion,
+          kind: question.kind,
+          lead_in_type: question.reaction?.type ?? null,
+          lead_in_text: question.reaction?.text ?? null,
+        },
+      }),
+      ...(last && question.source === 'ai' ? [prisma.applicationAnswer.update({ where: { id: last.id }, data: { signals: shows } })] : []),
+    ]);
+    return created;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return (await rows(app.id)).find((a) => a.position === position) ?? null;
     throw err;
@@ -101,20 +203,23 @@ export type InterviewState = Awaited<ReturnType<typeof interviewState>>;
 
 const specOf = (a: Pick<ApplicationAnswer, 'spec'>): Spec | null => (a.spec as Spec | null) ?? null;
 
+export const leadIn = (a: Pick<ApplicationAnswer, 'lead_in_type' | 'lead_in_text'>) => (a.lead_in_text ? { type: a.lead_in_type ?? 'curious', text: a.lead_in_text } : null);
+
 export const interviewState = async (app: Application) => {
   const answers = await rows(app.id);
   const answered = answers.filter((a) => textOf(a) !== '');
   const flagged = hasSensitiveAnswer(answers);
   // Alfred may stop before the maximum once he has heard enough about every quality.
-  const complete = answered.length >= TOTAL_QUESTIONS || enoughEvidence(answers.map((a) => ({ criterion: a.criterion, text: textOf(a) })));
+  const complete = answered.length >= TOTAL_QUESTIONS || enoughEvidence(evidenceOf(answers));
   return {
     // The most Alfred will ask. He may finish sooner.
     total: TOTAL_QUESTIONS,
+    tone: app.alfred_tone,
     answered: answered.length,
     complete,
     // Someone who flagged something may submit what they have, so a worried applicant is never trapped.
     can_submit: complete || (flagged && answered.length >= 1),
-    questions: answers.map((a) => ({ position: a.position, alternatives_left: Math.max(0, MAX_ALTERNATIVES - a.alternatives), question: a.question_text, format: a.format, spec: specOf(a), answer: textOf(a) || null })),
+    questions: answers.map((a) => ({ position: a.position, alternatives_left: Math.max(0, MAX_ALTERNATIVES - a.alternatives), question: a.question_text, format: a.format, spec: specOf(a), kind: a.kind, lead_in: leadIn(a), answer: textOf(a) || null })),
   };
 };
 
@@ -186,7 +291,7 @@ export const helpWithQuestion = async (app: Application, position: number, actio
   const swap = async (target: Criterion) => {
     const f = pickFallback(target, used, { age, interests: app.interests, allowFormats: false });
     if (!f) return false;
-    await prisma.applicationAnswer.update({ where: { id: row.id }, data: { question_key: f.key, question_text: f.text, source: 'fallback', prompt_version: null, format: 'text', spec: Prisma.JsonNull, criterion: target, hint_used: false, alternatives: action === 'alternative' ? { increment: 1 } : 0 } });
+    await prisma.applicationAnswer.update({ where: { id: row.id }, data: { question_key: f.key, question_text: f.text, source: 'fallback', prompt_version: null, format: 'text', spec: Prisma.JsonNull, criterion: target, kind: 'new', lead_in_type: null, lead_in_text: null, hint_used: false, alternatives: action === 'alternative' ? { increment: 1 } : 0 } });
     return true;
   };
 
@@ -196,7 +301,7 @@ export const helpWithQuestion = async (app: Application, position: number, actio
   }
 
   if (app.alfred_skips >= MAX_SKIPS) return { error: `You can skip up to ${MAX_SKIPS} questions. Give this one a go, even a short answer helps.` };
-  const have = new Set(coveredBy(answers.map((a) => ({ criterion: a.criterion, text: textOf(a) }))));
+  const have = new Set(coveredBy(evidenceOf(answers)));
   const options = CRITERIA.filter((c) => c !== criterion && !have.has(c) && !answers.some((a) => a.criterion === c)).sort((a, b) => RUBRIC[b] - RUBRIC[a]);
   for (const target of options) {
     if (await swap(target)) {

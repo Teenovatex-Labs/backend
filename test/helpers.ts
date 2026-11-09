@@ -15,6 +15,7 @@ export const resetDb = async () => {
 /** A valid answer to whatever Alfred just asked, whether it wants typed text, a pick, or a number. */
 export const answerFor = (next: { format: string; spec?: { options?: string[]; min?: number } | null }, text: string) => {
   if (next.format === 'choice' || next.format === 'multi') return { choice: [next.spec!.options![0]!] };
+  if (next.format === 'rank') return { choice: next.spec!.options! };
   if (next.format === 'scale' || next.format === 'slider') return { value: next.spec?.min ?? 1 };
   return { answer: text };
 };

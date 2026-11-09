@@ -105,6 +105,8 @@ model Application {
   status       ApplicationStatus @default(draft)
   // How many of Alfred's questions the applicant has skipped.
   alfred_skips Int               @default(0)
+  // How Alfred talks to this applicant: playful, balanced or plain. Chosen by the applicant, never inferred, never scored.
+  alfred_tone  String            @default("balanced")
 
   email             String
   email_verified_at DateTime?
@@ -187,6 +189,13 @@ model ApplicationAnswer {
   // The rubric criterion this question gathers evidence for.
   criterion      String?
   answer         Json?
+  // What Alfred said on the way into this question (a reaction to the previous answer). Never shown to reviewers or fed to scoring.
+  lead_in_type   String?
+  lead_in_text   String?
+  // 'new' starts a topic, 'follow_up' digs into the previous answer.
+  kind           String         @default("new")
+  // Criteria this answer plausibly shows, used only to decide what Alfred asks next. Reviewers get evidence from the raw answers.
+  signals        Json?
   revision       Int            @default(1)
   // Help the applicant asked for on this question.
   hint_used      Boolean        @default(false)
