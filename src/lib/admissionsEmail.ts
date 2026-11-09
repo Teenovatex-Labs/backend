@@ -5,7 +5,7 @@ import { send } from './resend.js';
 const APP_URL = config.appUrl;
 
 export const sendApplicationLink = (email: string, token: string, test = false) => {
-  const link = `${APP_URL}/apply/resume?token=${token}`;
+  const link = `${APP_URL}/apply?token=${token}`;
   return send(
     email,
     'Your TeenovateX application link',
@@ -34,7 +34,7 @@ export const sendApplicationReceived = (email: string, reference: string, test =
       heading: 'Submitted. Nice work.',
       bodyHtml: `<p style="margin:0 0 12px;">Your reference is <strong>${reference}</strong>. Submitting is not the same as being accepted: our team reviews every application, and results are released together on the announced decision date.</p>`,
       ctaLabel: 'Track my application',
-      ctaHref: `${APP_URL}/apply/track`,
+      ctaHref: `${APP_URL}/apply`,
       footerNote: 'Keep this email so you have your reference.',
     }),
     'Application received',
@@ -108,7 +108,7 @@ export const sendWaitlisted = (email: string, test = false) =>
       heading: 'On the waitlist.',
       bodyHtml: '<p style="margin:0;">We liked your application but this round is full. You stay on the waitlist until the next review, and we will contact you then with an update or clear next steps.</p>',
       ctaLabel: 'Track my application',
-      ctaHref: `${APP_URL}/apply/track`,
+      ctaHref: `${APP_URL}/apply`,
       footerNote: 'No action is needed from you.',
     }),
     'Waitlist',
@@ -126,7 +126,7 @@ export const sendClarificationRequest = (email: string, days: number, test = fal
       heading: 'One quick question.',
       bodyHtml: `<p style="margin:0;">A reviewer asked for a little more detail. Open your application and reply within ${days} days.</p>`,
       ctaLabel: 'Open my application',
-      ctaHref: `${APP_URL}/apply/track`,
+      ctaHref: `${APP_URL}/apply`,
       footerNote: 'Use the link from your earlier email, or ask for a new one on the apply page.',
     }),
     'Clarification',
@@ -135,7 +135,7 @@ export const sendClarificationRequest = (email: string, days: number, test = fal
   );
 
 export const sendGuardianRequest = (parentEmail: string, childFirstName: string, token: string, days: number, test = false) => {
-  const link = `${APP_URL}/guardian/${token}`;
+  const link = `${APP_URL}/consent/${token}`;
   return send(
     parentEmail,
     `${childFirstName} would like your OK to join TeenovateX`,
@@ -222,7 +222,7 @@ export const sendInterviewInvite = (email: string, details: string, test = false
       heading: 'Let&rsquo;s have a short chat.',
       bodyHtml: `<p style="margin:0 0 12px;">We liked your application and would like a short, friendly call to get to know you better. It is not a test, and there is nothing to prepare. A parent or guardian is welcome to be there.</p><p style="margin:0;white-space:pre-line;">${esc(details)}</p>`,
       ctaLabel: 'Open my application',
-      ctaHref: `${APP_URL}/apply/track`,
+      ctaHref: `${APP_URL}/apply`,
       footerNote: 'Reply to this email if the time does not work. This is not an acceptance yet.',
     }),
     'Interview invite',

@@ -51,4 +51,15 @@ describe('status lookup', () => {
     expect(me.status).toBe(200);
     expect(me.body.status).toBe('submitted');
   });
+
+  it('answers a team member who applied in a test window with their application link, not "already a member"', async () => {
+    const { user } = await makeUser({ role: 'admin' });
+    const w = await prisma.applicationWindow.create({ data: { opens_at: new Date(Date.now() - 1e6), closes_at: new Date(Date.now() + 1e8), decisions_publish_at: new Date(Date.now() - 1e6), form_version: 'v1', is_test: true, test_key: 'k'.repeat(20) } });
+    await prisma.application.create({
+      data: { reference: 'TEST-2026-00001', window_id: w.id, status: 'draft', email: user.email, full_name: 'Tester', birth_date: new Date('2008-01-01'), country: 'NG', city: 'Abuja', whatsapp: '+2348012345678', education_level: 'secondary', interests: [], current_skills: [], learning_goals: [] },
+    });
+    expect((await lookup(user.email)).status).toBe(202);
+    expect(sendApplicationLink).toHaveBeenCalledWith(user.email, expect.any(String), true);
+    expect(sendLookupMember).not.toHaveBeenCalled();
+  });
 });
