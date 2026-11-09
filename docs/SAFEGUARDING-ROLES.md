@@ -49,8 +49,8 @@ Open item: counsel to review whether this is enough for adult tutors of minors.
 
 ## E. Incidents
 - Serious safety matters (abuse, grooming, threats of harm, self-harm): follow `SAFEGUARDING.md`. Only the **designated safeguarding personnel** are notified, never every reviewer or moderator.
-- A named deputy covers when the lead is unavailable. Open item: the owner to confirm who the deputy is (the second approving admin may or may not be the same person).
-- Reporting channel (owner decision 2026-11-09): serious matters are reported from the official teenovatex.org email. Open item: the exact mailbox address to record here.
+- A named deputy covers when the lead is unavailable. Deputy safeguarding lead (owner decision 2026-11-09): Shazily, who is also the second approving admin.
+- Reporting channel (owner decision 2026-11-09): serious matters are reported through `support@teenovatex.org`.
 - Reporting to authorities follows the law in the relevant country. **Counsel must confirm the channel and the retention period before launch.**
 - Record the audit entry id and the date reported.
 
@@ -92,4 +92,4 @@ Open item: counsel to review whether this is enough for adult tutors of minors.
 - [x] Owner (Anas Abubakar): signed in the project thread  date: 2026-11-09
 - [ ] Counsel: reporting channel and retention (section E): ________
 - [ ] Counsel: guardian age threshold per country, and AI processing before consent (section G, K): ________
-- [ ] Named deputy safeguarding lead (section E): ________
+- [x] Named deputy safeguarding lead (section E): Shazily, 2026-11-09
