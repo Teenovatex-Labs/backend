@@ -1,9 +1,9 @@
-// Usage: npm run role -- <email> <member|mentor|moderator|admin>
+// Usage: npm run role -- <email> <member|mentor|moderator|admin|tutor|partner>
 // Runs against whatever DATABASE_URL points at, so on the server it changes real roles.
 import { prisma } from '../src/db.js';
 
 const [email, role] = process.argv.slice(2);
-const roles = ['member', 'mentor', 'moderator', 'admin'] as const;
+const roles = ['member', 'mentor', 'moderator', 'admin', 'tutor', 'partner'] as const;
 type RoleName = (typeof roles)[number];
 
 if (!email || !roles.includes(role as RoleName)) {
