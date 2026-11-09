@@ -1,0 +1,97 @@
+// Live classes run by tutors. Separate from Learn, which is self-paced content.
+// Rules live in docs/SAFEGUARDING-ROLES.md section B: class chat only, tutors see only their own classes.
+
+enum ClassStatus {
+  draft
+  open
+  closed
+  archived
+}
+
+enum EnrollmentStatus {
+  pending
+  active
+  removed
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  excused
+}
+
+model Class {
+  id          String      @id @default(uuid())
+  tutor_id    String
+  title       String
+  description String
+  slug        String      @unique
+  level       String?
+  capacity    Int         @default(30)
+  status      ClassStatus @default(draft)
+  // Members join with this code; null while the class is a draft.
+  join_code   String?     @unique
+  starts_on   DateTime?   @db.Date
+  ends_on     DateTime?   @db.Date
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  tutor       User           @relation("ClassTutor", fields: [tutor_id], references: [id], onDelete: Cascade)
+  sessions    ClassSession[]
+  enrollments Enrollment[]
+
+  @@index([tutor_id, status])
+  @@index([status])
+  @@map("classes")
+}
+
+model ClassSession {
+  id               String   @id @default(uuid())
+  class_id         String
+  starts_at        DateTime
+  ends_at          DateTime
+  // The host adds the meeting link; links are allowed in classes.
+  meeting_url      String?
+  notes            String?
+  // Required when an adult tutor teaches anyone under 18 (safeguarding section B). Enforced by the endpoints.
+  second_person_id String?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  class      Class        @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  attendance Attendance[]
+
+  @@index([class_id, starts_at])
+  @@map("class_sessions")
+}
+
+model Enrollment {
+  id        String           @id @default(uuid())
+  class_id  String
+  user_id   String
+  status    EnrollmentStatus @default(pending)
+  joined_at DateTime         @default(now())
+
+  class Class @relation(fields: [class_id], references: [id], onDelete: Cascade)
+  user  User  @relation("ClassEnrollment", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([class_id, user_id])
+  @@index([user_id, status])
+  @@map("enrollments")
+}
+
+model Attendance {
+  id         String           @id @default(uuid())
+  session_id String
+  user_id    String
+  status     AttendanceStatus
+  marked_by  String
+  marked_at  DateTime         @default(now())
+
+  session ClassSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user    User         @relation("ClassAttendance", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([session_id, user_id])
+  @@index([user_id])
+  @@map("attendance")
+}
