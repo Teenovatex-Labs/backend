@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { Resend } from 'resend';
 import { renderEmailShell } from './emailTemplate.js';
+import { testRecipientAllowed } from './testWindow.js';
 
 // Signup verification + password reset codes go through Resend (not the
 // Gmail SMTP transport in lib/email.ts). Defaults to Resend's own sandbox
@@ -13,7 +14,15 @@ const FROM = config.resend.from;
 const SITE_URL = config.siteUrl;
 const APP_URL = config.appUrl;
 
-export const send = async (to: string, subject: string, html: string, devLabel: string, devExtra: string) => {
+export const send = async (to: string, subject: string, html: string, devLabel: string, devExtra: string, opts: { test?: boolean } = {}) => {
+  if (opts.test) {
+    // A test window may only ever reach the team. Anything else is dropped, never sent.
+    if (!(await testRecipientAllowed(to))) {
+      console.warn(`[TEST] Not sending "${devLabel}": recipient is not a team address.`);
+      return;
+    }
+    subject = `[TEST] ${subject}`;
+  }
   if (!resend) {
     console.log(`[DEV] ${devLabel} for ${to}: ${devExtra}`);
     return;

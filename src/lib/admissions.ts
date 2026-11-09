@@ -12,11 +12,21 @@ export type WindowState = 'upcoming' | 'open' | 'closed';
 export const windowState = (w: Pick<ApplicationWindow, 'opens_at' | 'closes_at'>, now = new Date()): WindowState =>
   now < w.opens_at ? 'upcoming' : now < w.closes_at ? 'open' : 'closed';
 
+// Test windows never count as "the" open or next window: the public, the reminders and the carry-forward of drafts only see real ones.
 export const findOpenWindow = (now = new Date()) =>
-  prisma.applicationWindow.findFirst({ where: { opens_at: { lte: now }, closes_at: { gt: now } }, orderBy: { opens_at: 'desc' } });
+  prisma.applicationWindow.findFirst({ where: { is_test: false, opens_at: { lte: now }, closes_at: { gt: now } }, orderBy: { opens_at: 'desc' } });
 
 export const findNextWindow = (now = new Date()) =>
-  prisma.applicationWindow.findFirst({ where: { opens_at: { gt: now } }, orderBy: { opens_at: 'asc' } });
+  prisma.applicationWindow.findFirst({ where: { is_test: false, opens_at: { gt: now } }, orderBy: { opens_at: 'asc' } });
+
+/** The open test window behind a private link, or null. Wrong or missing key is the same answer. */
+export const findTestWindow = (key: string | undefined | null, now = new Date()) =>
+  key ? prisma.applicationWindow.findFirst({ where: { is_test: true, test_key: key, opens_at: { lte: now }, closes_at: { gt: now } } }) : Promise.resolve(null);
+
+export const windowIsTest = async (window_id: string): Promise<boolean> =>
+  (await prisma.applicationWindow.findUnique({ where: { id: window_id }, select: { is_test: true } }))?.is_test ?? false;
+
+export const newTestKey = () => crypto.randomBytes(18).toString('hex');
 
 /** A fresh link token. Only its hash is stored. */
 export const newResumeToken = () => {
@@ -25,11 +35,12 @@ export const newResumeToken = () => {
 };
 
 /** TX-2026-00024. Sequential per year; a clash from two simultaneous applicants just retries. */
-export const createWithReference = async <T>(make: (reference: string) => Promise<T>): Promise<T> => {
+export const createWithReference = async <T>(make: (reference: string) => Promise<T>, prefix: 'TX' | 'TEST' = 'TX'): Promise<T> => {
   const year = new Date().getUTCFullYear();
   for (let attempt = 0; attempt < 6; attempt++) {
-    const count = await prisma.application.count({ where: { reference: { startsWith: `TX-${year}-` } } });
-    const reference = `TX-${year}-${String(count + 1 + attempt).padStart(5, '0')}`;
+    // Test applications have their own numbering, so rehearsals never leave gaps in the real sequence.
+    const count = await prisma.application.count({ where: { reference: { startsWith: `${prefix}-${year}-` } } });
+    const reference = `${prefix}-${year}-${String(count + 1 + attempt).padStart(5, '0')}`;
     try {
       return await make(reference);
     } catch (err) {

@@ -64,6 +64,8 @@ const buildSchema = (isProduction: boolean) => {
       // Comma-separated emails of the designated safeguarding lead and deputy (docs/SAFEGUARDING-ROLES.md, section E).
       // Serious safety alerts go only to them. Unset, they fall back to admins and a warning is logged.
       SAFEGUARDING_LEAD_EMAILS: z.string().optional(),
+      // Extra addresses a test admissions window may email (comma-separated). Admin and moderator addresses are always allowed, with or without a +tag.
+      TEST_EMAIL_ALLOWLIST: z.string().optional(),
       ADMISSIONS_AI_ENABLED: z.string().default('true'),
       ADMISSIONS_SUMMARY_ENABLED: z.string().default('false'),
       ADMISSIONS_SUGGESTED_RATINGS: z.enum(['after_review', 'always', 'off']).default('after_review'),
@@ -112,6 +114,7 @@ export const parseConfig = (env: NodeJS.ProcessEnv) => {
     guardianAgeBelow: c.GUARDIAN_AGE_BELOW,
     onboarding: { whatsappUrl: c.ONBOARDING_WHATSAPP_URL, hcbUrl: c.ONBOARDING_HCB_URL },
     safeguardingEmails: splitKeys(c.SAFEGUARDING_LEAD_EMAILS).map((e) => e.toLowerCase()),
+    testEmailAllowlist: splitKeys(c.TEST_EMAIL_ALLOWLIST).map((e) => e.toLowerCase()),
     admissionsAiEnabled: c.ADMISSIONS_AI_ENABLED !== 'false',
     // Reviewer summaries are off until someone turns them on deliberately.
     admissionsSummaryEnabled: c.ADMISSIONS_SUMMARY_ENABLED === 'true',

@@ -82,6 +82,10 @@ model ApplicationWindow {
   form_version         String
   note                 String?
   created_by           String?
+  // A rehearsal. Hidden from the public, kept out of real counts, emails only reach admins, no
+  // invitation it creates can open an account, and it can be purged whole. test_key is the private link.
+  is_test              Boolean      @default(false)
+  test_key             String?      @unique
   created_at           DateTime     @default(now())
   updated_at           DateTime     @updatedAt
 
@@ -89,6 +93,7 @@ model ApplicationWindow {
   reminders    ApplicationReminder[]
 
   @@index([opens_at])
+  @@index([is_test])
   @@map("application_windows")
 }
 

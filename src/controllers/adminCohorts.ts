@@ -2,7 +2,8 @@ import type { Request, Response } from 'express';
 import { prisma } from '../db.js';
 import { HttpError } from '../lib/errors.js';
 import { audit } from '../lib/audit.js';
-import { INVITE_DAYS, RETENTION_MS, newInvitation, windowState } from '../lib/admissions.js';
+import { INVITE_DAYS, RETENTION_MS, newInvitation, newTestKey, windowState } from '../lib/admissions.js';
+import { purgeTestWindow } from '../jobs/retention.js';
 import { sendAcceptance, sendDecline, sendWaitlisted } from '../lib/admissionsEmail.js';
 import type { AuthRequest } from '../middleware/auth.js';
 
@@ -12,12 +13,13 @@ const checkDates = async (d: Dates, ignoreId?: string) => {
   if (!(d.opens_at < d.closes_at)) throw new HttpError(400, 'VALIDATION_ERROR', 'The window must close after it opens');
   if (!(d.closes_at <= d.decisions_publish_at)) throw new HttpError(400, 'VALIDATION_ERROR', 'Decisions cannot be released before the window closes');
   const clash = await prisma.applicationWindow.findFirst({
-    where: { id: { not: ignoreId }, opens_at: { lt: d.closes_at }, closes_at: { gt: d.opens_at } },
+    // Test windows are rehearsals and never block or are blocked by a real one.
+    where: { id: { not: ignoreId }, is_test: false, opens_at: { lt: d.closes_at }, closes_at: { gt: d.opens_at } },
   });
   if (clash) throw new HttpError(409, 'WINDOW_OVERLAP', 'Another window already covers part of these dates');
 };
 
-const shape = (w: { id: string; opens_at: Date; closes_at: Date; decisions_publish_at: Date; target_size: number | null; status: string; note: string | null }, counts?: Record<string, number>) => ({
+const shape = (w: { id: string; opens_at: Date; closes_at: Date; decisions_publish_at: Date; target_size: number | null; status: string; note: string | null; is_test?: boolean; test_key?: string | null }, counts?: Record<string, number>) => ({
   id: w.id,
   opens_at: w.opens_at.toISOString(),
   closes_at: w.closes_at.toISOString(),
@@ -26,6 +28,9 @@ const shape = (w: { id: string; opens_at: Date; closes_at: Date; decisions_publi
   note: w.note,
   state: windowState(w),
   released: w.status === 'published',
+  is_test: w.is_test ?? false,
+  // The private link's key. Only admins reach this endpoint.
+  test_key: w.is_test ? w.test_key ?? null : null,
   ...(counts && { applications: counts }),
 });
 
@@ -48,6 +53,33 @@ export const createCohort = async (req: AuthRequest, res: Response): Promise<voi
   });
   await audit(req.userId!, 'cohort.create', { type: 'application_window', id: w.id });
   res.status(201).json(shape(w));
+};
+
+/**
+ * A rehearsal window, open right now, reachable only through its private link. Decisions are releasable at once
+ * (its decision date is its opening time) so the whole path can be walked in one sitting.
+ */
+export const createTestCohort = async (req: AuthRequest, res: Response): Promise<void> => {
+  const b = req.body as { days: number; note?: string | null };
+  const now = new Date();
+  const w = await prisma.applicationWindow.create({
+    data: {
+      opens_at: now, closes_at: new Date(now.getTime() + b.days * 86_400_000), decisions_publish_at: now,
+      note: b.note ?? 'Test window', form_version: 'v1', created_by: req.userId, is_test: true, test_key: newTestKey(),
+    },
+  });
+  await audit(req.userId!, 'cohort.create_test', { type: 'application_window', id: w.id });
+  res.status(201).json(shape(w));
+};
+
+/** Deletes a test window and everything in it. Real windows can never be deleted here. */
+export const purgeCohort = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.id);
+  const w = await prisma.applicationWindow.findUnique({ where: { id }, select: { is_test: true } });
+  if (!w) throw new HttpError(404, 'NOT_FOUND', 'Window not found');
+  if (!w.is_test) throw new HttpError(409, 'NOT_TEST', 'Only test windows can be deleted. Real windows are kept as the record.');
+  const removed = await purgeTestWindow(id, `test window purged by admin ${req.userId}`);
+  res.json({ purged: removed });
 };
 
 export const updateCohort = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -108,14 +140,14 @@ export const releaseCohort = async (req: AuthRequest, res: Response): Promise<vo
     if (!claimed) continue;
     if (invite) invited++;
     try {
-      if (invite) await sendAcceptance(a.email, invite.token, INVITE_DAYS);
-      else if (a.status === 'declined') await sendDecline(a.email, a.decline_feedback);
-      else await sendWaitlisted(a.email);
+      if (invite) await sendAcceptance(a.email, invite.token, INVITE_DAYS, w.is_test);
+      else if (a.status === 'declined') await sendDecline(a.email, a.decline_feedback, w.is_test);
+      else await sendWaitlisted(a.email, w.is_test);
     } catch (err) {
       console.error('Decision email failed:', err);
     }
   }
   await prisma.applicationWindow.update({ where: { id }, data: { status: 'published' } });
-  await audit(req.userId!, 'cohort.release', { type: 'application_window', id }, { released: apps.length, invited });
+  await audit(req.userId!, 'cohort.release', { type: 'application_window', id }, { released: apps.length, invited, ...(w.is_test && { test: true }) });
   res.json({ released: apps.length, invited, still_under_review: undecided });
 };

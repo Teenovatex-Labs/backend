@@ -8,7 +8,7 @@ import { can } from '../lib/permissions.js';
 import { config } from '../config.js';
 import { gatherEvidence, suggestionsVisible } from '../lib/alfred/evidence.js';
 import { CRITERIA, CRITERION_GUIDE, INSUFFICIENT_EVIDENCE, RATING_GUIDE, RUBRIC, weightedScore, type Criterion, type Rating } from '../lib/rubric.js';
-import { OFFER_HOURS, RETENTION_MS } from '../lib/admissions.js';
+import { OFFER_HOURS, RETENTION_MS, windowIsTest } from '../lib/admissions.js';
 import { hashToken } from '../lib/tokens.js';
 import crypto from 'node:crypto';
 import { sendClarificationRequest, sendInterviewInvite, sendWaitlistOffer } from '../lib/admissionsEmail.js';
@@ -47,22 +47,25 @@ export const listApplications = async (req: AuthRequest, res: Response): Promise
   const where: Prisma.ApplicationWhereInput = {
     status: q.status ? (q.status as ApplicationStatus) : { not: 'draft' },
     ...(q.window_id && { window_id: q.window_id }),
+    // Rehearsals stay out of the real queue unless asked for (or the window is named outright).
+    ...(!q.window_id && q.include_test !== '1' && { window: { is_test: false } }),
     ...(q.claimed === 'mine' && { claimed_by: req.userId }),
     ...(q.claimed === 'none' && { claimed_by: null }),
   };
   const [rows, total] = await Promise.all([
-    prisma.application.findMany({ where, orderBy: { submitted_at: 'asc' }, skip: (page - 1) * PAGE, take: PAGE }),
+    prisma.application.findMany({ where, orderBy: { submitted_at: 'asc' }, skip: (page - 1) * PAGE, take: PAGE, include: { window: { select: { is_test: true } } } }),
     prisma.application.count({ where }),
   ]);
-  res.json({ items: rows.map(summary), total, page, pages: Math.ceil(total / PAGE) });
+  res.json({ items: rows.map((r) => ({ ...summary(r), is_test: r.window.is_test })), total, page, pages: Math.ceil(total / PAGE) });
 };
 
 export const applicationStats = async (req: Request, res: Response): Promise<void> => {
   const window_id = typeof req.query.window_id === 'string' ? req.query.window_id : undefined;
-  const grouped = await prisma.application.groupBy({ by: ['status'], where: { ...(window_id && { window_id }), status: { not: 'draft' } }, _count: { _all: true } });
+  const realOnly = !window_id && req.query.include_test !== '1' ? { window: { is_test: false } } : {};
+  const grouped = await prisma.application.groupBy({ by: ['status'], where: { ...(window_id && { window_id }), ...realOnly, status: { not: 'draft' } }, _count: { _all: true } });
   const counts: Record<string, number> = {};
   for (const g of grouped) counts[g.status] = g._count._all;
-  const unclaimed = await prisma.application.count({ where: { ...(window_id && { window_id }), status: 'submitted', claimed_by: null } });
+  const unclaimed = await prisma.application.count({ where: { ...(window_id && { window_id }), ...realOnly, status: 'submitted', claimed_by: null } });
   res.json({ counts, unclaimed });
 };
 
@@ -116,7 +119,8 @@ export const getApplication = async (req: AuthRequest, res: Response): Promise<v
   const shown = reviews.filter((r) => r.reviewer_id === req.userId || mineDone);
   const submitted = reviews.filter((r) => r.submitted_at);
   const disagree = submitted.length >= 2 && new Set(submitted.map((r) => r.recommendation)).size > 1;
-  const [answers, attachments, clarifications] = await Promise.all([
+  const [window, answers, attachments, clarifications] = await Promise.all([
+    prisma.applicationWindow.findUnique({ where: { id: app.window_id }, select: { is_test: true } }),
     prisma.applicationAnswer.findMany({ where: { application_id: app.id }, orderBy: { position: 'asc' } }),
     prisma.applicationAttachment.findMany({ where: { application_id: app.id } }),
     prisma.applicationClarification.findMany({ where: { application_id: app.id }, orderBy: { created_at: 'asc' } }),
@@ -125,6 +129,7 @@ export const getApplication = async (req: AuthRequest, res: Response): Promise<v
   await audit(req.userId!, 'application.view', { type: 'application', id: app.id });
   res.json({
     ...summary(app),
+    is_test: window?.is_test ?? false,
     email: app.email, whatsapp: app.whatsapp, city: app.city, school: app.school, education_level: app.education_level,
     interests: app.interests, skill_level: app.skill_level, skill_level_note: app.skill_level_note,
     current_skills: app.current_skills, learning_goals: app.learning_goals,
@@ -229,7 +234,7 @@ export const askClarification = async (req: AuthRequest, res: Response): Promise
     data: { application_id: app.id, asked_by: req.userId!, question, due_at: new Date(Date.now() + CLARIFICATION_DAYS * 86_400_000) },
   });
   try {
-    await sendClarificationRequest(app.email, CLARIFICATION_DAYS);
+    await sendClarificationRequest(app.email, CLARIFICATION_DAYS, await windowIsTest(app.window_id));
   } catch (err) {
     console.error('Clarification email failed:', err);
   }
@@ -253,7 +258,7 @@ export const offerWaitlistPlace = async (req: AuthRequest, res: Response): Promi
     data: { waitlist_offer_hash: hashToken(token), waitlist_offer_sent_at: new Date(), waitlist_offer_expires_at: expires, waitlist_offer_response: null },
   });
   try {
-    await sendWaitlistOffer(app.email, token, OFFER_HOURS);
+    await sendWaitlistOffer(app.email, token, OFFER_HOURS, await windowIsTest(app.window_id));
   } catch (err) {
     console.error('Waitlist offer email failed:', err);
   }
@@ -267,7 +272,7 @@ export const inviteToInterview = async (req: AuthRequest, res: Response): Promis
   assertReviewer(app, req.userId!);
   if (!['submitted', 'under_review', 'shortlisted'].includes(app.status)) throw new HttpError(409, 'ALREADY_DECIDED', 'Decided applications cannot be invited to a call.');
   const { details } = req.body as { details: string };
-  await sendInterviewInvite(app.email, details);
+  await sendInterviewInvite(app.email, details, await windowIsTest(app.window_id));
   await prisma.application.update({ where: { id: app.id }, data: { interview_invited_at: new Date() } });
   await audit(req.userId!, 'application.interview_invite', { type: 'application', id: app.id });
   res.status(201).json({ message: 'Invitation sent' });

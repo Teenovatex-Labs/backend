@@ -6,6 +6,7 @@ import { createNotification } from '../notify.js';
 import { send } from '../resend.js';
 import { generate, hasProviders } from '../pet/providers.js';
 import { ageOn } from '../age.js';
+import { windowIsTest } from '../admissions.js';
 import { CRITERIA, CRITERION_GUIDE, RUBRIC, type Criterion } from '../rubric.js';
 import { FOCUS, TOTAL_QUESTIONS, covered as coveredBy, enoughEvidence, nextCriterion, pickFallback } from './questions.js';
 import { acceptSpec, composeAnswer, type AnswerInput, type Format, type Spec } from './formats.js';
@@ -150,6 +151,8 @@ export const saveAnswer = async (app: Application, position: number, input: Answ
   if (!isSensitive(text)) return { safety: null };
 
   await audit(null, 'application.safeguarding_flag', { type: 'application', id: app.id }, { reference: app.reference, position });
+  // A rehearsal must never wake the safeguarding lead. The applicant still sees the same reply as a real one would get.
+  if (await windowIsTest(app.window_id)) return { safety: SAFETY_REPLY };
   await alertSafeguarding(app.reference);
   return { safety: SAFETY_REPLY };
 };

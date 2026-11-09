@@ -4,7 +4,7 @@ import { send } from './resend.js';
 
 const APP_URL = config.appUrl;
 
-export const sendApplicationLink = (email: string, token: string) => {
+export const sendApplicationLink = (email: string, token: string, test = false) => {
   const link = `${APP_URL}/apply/resume?token=${token}`;
   return send(
     email,
@@ -19,11 +19,12 @@ export const sendApplicationLink = (email: string, token: string) => {
       footerNote: 'If you didn&rsquo;t start an application, you can ignore this email.',
     }),
     'Application link',
-    link
+    link,
+    { test }
   );
 };
 
-export const sendApplicationReceived = (email: string, reference: string) =>
+export const sendApplicationReceived = (email: string, reference: string, test = false) =>
   send(
     email,
     `We got your application (${reference})`,
@@ -37,10 +38,11 @@ export const sendApplicationReceived = (email: string, reference: string) =>
       footerNote: 'Keep this email so you have your reference.',
     }),
     'Application received',
-    reference
+    reference,
+    { test }
   );
 
-export const sendApplicationReminderOpen = (email: string) =>
+export const sendApplicationReminderOpen = (email: string, test = false) =>
   send(
     email,
     'TeenovateX applications are open',
@@ -54,10 +56,11 @@ export const sendApplicationReminderOpen = (email: string) =>
       footerNote: 'You are getting this because you asked for a reminder.',
     }),
     'Reminder',
-    email
+    email,
+    { test }
   );
 
-export const sendAcceptance = (email: string, inviteToken: string, days: number) => {
+export const sendAcceptance = (email: string, inviteToken: string, days: number, test = false) => {
   const link = `${APP_URL}/signup?invite=${inviteToken}`;
   return send(
     email,
@@ -72,11 +75,12 @@ export const sendAcceptance = (email: string, inviteToken: string, days: number)
       footerNote: 'This invitation only works for the email address it was sent to.',
     }),
     'Acceptance',
-    link
+    link,
+    { test }
   );
 };
 
-export const sendDecline = (email: string, feedback: string | null) =>
+export const sendDecline = (email: string, feedback: string | null, test = false) =>
   send(
     email,
     'Your TeenovateX application',
@@ -90,10 +94,11 @@ export const sendDecline = (email: string, feedback: string | null) =>
       footerNote: 'You can reapply in any later window.',
     }),
     'Decline',
-    email
+    email,
+    { test }
   );
 
-export const sendWaitlisted = (email: string) =>
+export const sendWaitlisted = (email: string, test = false) =>
   send(
     email,
     'Your TeenovateX application: waitlisted',
@@ -107,10 +112,11 @@ export const sendWaitlisted = (email: string) =>
       footerNote: 'No action is needed from you.',
     }),
     'Waitlist',
-    email
+    email,
+    { test }
   );
 
-export const sendClarificationRequest = (email: string, days: number) =>
+export const sendClarificationRequest = (email: string, days: number, test = false) =>
   send(
     email,
     'A question about your TeenovateX application',
@@ -124,10 +130,11 @@ export const sendClarificationRequest = (email: string, days: number) =>
       footerNote: 'Use the link from your earlier email, or ask for a new one on the apply page.',
     }),
     'Clarification',
-    email
+    email,
+    { test }
   );
 
-export const sendGuardianRequest = (parentEmail: string, childFirstName: string, token: string, days: number) => {
+export const sendGuardianRequest = (parentEmail: string, childFirstName: string, token: string, days: number, test = false) => {
   const link = `${APP_URL}/guardian/${token}`;
   return send(
     parentEmail,
@@ -142,11 +149,12 @@ export const sendGuardianRequest = (parentEmail: string, childFirstName: string,
       footerNote: 'You can withdraw your confirmation at any time from the same link.',
     }),
     'Guardian request',
-    link
+    link,
+    { test }
   );
 };
 
-export const sendLookupMember = (email: string) =>
+export const sendLookupMember = (email: string, test = false) =>
   send(
     email,
     'You already have a TeenovateX account',
@@ -160,10 +168,11 @@ export const sendLookupMember = (email: string) =>
       footerNote: 'If this was not you, you can ignore this email.',
     }),
     'Lookup: member',
-    email
+    email,
+    { test }
   );
 
-export const sendLookupNone = (email: string) =>
+export const sendLookupNone = (email: string, test = false) =>
   send(
     email,
     'We could not find a TeenovateX application',
@@ -177,10 +186,11 @@ export const sendLookupNone = (email: string) =>
       footerNote: 'If this was not you, you can ignore this email.',
     }),
     'Lookup: none',
-    email
+    email,
+    { test }
   );
 
-export const sendWaitlistOffer = (email: string, token: string, hours: number) => {
+export const sendWaitlistOffer = (email: string, token: string, hours: number, test = false) => {
   const link = `${APP_URL}/apply/offer?token=${token}`;
   return send(
     email,
@@ -195,13 +205,14 @@ export const sendWaitlistOffer = (email: string, token: string, hours: number) =
       footerNote: 'This link is only for you, so please do not share it.',
     }),
     'Waitlist offer',
-    link
+    link,
+    { test }
   );
 };
 
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-export const sendInterviewInvite = (email: string, details: string) =>
+export const sendInterviewInvite = (email: string, details: string, test = false) =>
   send(
     email,
     'We would like to chat: your TeenovateX application',
@@ -215,5 +226,6 @@ export const sendInterviewInvite = (email: string, details: string) =>
       footerNote: 'Reply to this email if the time does not work. This is not an acceptance yet.',
     }),
     'Interview invite',
-    email
+    email,
+    { test }
   );

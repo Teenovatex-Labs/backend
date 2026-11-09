@@ -9,6 +9,8 @@ import {
   createWithReference,
   findNextWindow,
   findOpenWindow,
+  findTestWindow,
+  windowIsTest,
   newInvitation,
   newResumeToken,
   publicStatus,
@@ -19,14 +21,21 @@ import { hashToken } from '../lib/tokens.js';
 import { sendAcceptance, sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
 import { ANSWER_MAX, ensureNextQuestion, helpWithQuestion, interviewState, MAX_SKIPS, saveAnswer } from '../lib/alfred/interview.js';
 import { needsGuardian } from '../lib/guardian.js';
+import { TEST_EMAIL_HELP, testRecipientAllowed } from '../lib/testWindow.js';
 import { createNotification } from '../lib/notify.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
 
 const NEUTRAL = { message: 'If that email can apply, we have sent a link to it. Check your inbox.' };
 
 /** What the public may know about the intake. Never the internal target size. */
-export const currentWindow = async (_req: Request, res: Response): Promise<void> => {
+export const currentWindow = async (req: Request, res: Response): Promise<void> => {
   const now = new Date();
+  // A private test link shows its own window and nothing else. A wrong key looks like a closed window.
+  if (typeof req.query.test_key === 'string') {
+    const test = await findTestWindow(req.query.test_key, now);
+    res.json(test ? { state: 'open', window: pub(test), next_opens_at: null } : { state: 'closed', window: null, next_opens_at: null });
+    return;
+  }
   const open = await findOpenWindow(now);
   if (open) {
     res.json({ state: 'open', window: pub(open), next_opens_at: null });
@@ -36,8 +45,9 @@ export const currentWindow = async (_req: Request, res: Response): Promise<void>
   res.json({ state: 'closed', window: null, next_opens_at: next ? next.opens_at.toISOString() : null });
 };
 
-const pub = (w: { id: string; opens_at: Date; closes_at: Date; decisions_publish_at: Date }) => ({
+const pub = (w: { id: string; opens_at: Date; closes_at: Date; decisions_publish_at: Date; is_test?: boolean }) => ({
   id: w.id,
+  is_test: w.is_test ?? false,
   opens_at: w.opens_at.toISOString(),
   closes_at: w.closes_at.toISOString(),
   decisions_publish_at: w.decisions_publish_at.toISOString(),
@@ -55,7 +65,7 @@ export const requestReminder = async (req: Request, res: Response): Promise<void
 export const startApplication = async (req: Request, res: Response): Promise<void> => {
   const b = req.body as {
     email: string; full_name: string; birth_date: string; country: string; city: string;
-    whatsapp: string; school?: string | null; education_level: string;
+    whatsapp: string; school?: string | null; education_level: string; test_key?: string;
   };
 
   // The age check comes first and stores nothing: no row, no log, no email.
@@ -63,12 +73,18 @@ export const startApplication = async (req: Request, res: Response): Promise<voi
     throw new HttpError(422, 'UNDER_AGE', `TeenovateX is for ages ${MIN_AGE} and up. Come back and apply when you are ${MIN_AGE}.`);
   }
 
-  const window = await findOpenWindow();
+  // A test key picks the private test window; without one, only a real open window counts.
+  const testWindow = b.test_key ? await findTestWindow(b.test_key) : null;
+  if (b.test_key && !testWindow) throw new HttpError(409, 'APPLICATIONS_CLOSED', 'This test link is not valid, or the test window has closed.');
+  const window = testWindow ?? (await findOpenWindow());
   if (!window) throw new HttpError(409, 'APPLICATIONS_CLOSED', 'Applications are closed right now.');
+  const isTest = testWindow !== null;
+  // Rehearsals can only reach the team's own inboxes, whatever the link and whoever holds it.
+  if (isTest && !(await testRecipientAllowed(b.email))) throw new HttpError(422, 'TEST_EMAIL_NOT_ALLOWED', TEST_EMAIL_HELP);
 
   // Existing members and repeat visitors get the same answer as everyone else, so this
   // endpoint cannot be used to find out who has an account or an application.
-  const member = await prisma.user.findUnique({ where: { email: b.email }, select: { id: true } });
+  const member = isTest ? null : await prisma.user.findUnique({ where: { email: b.email }, select: { id: true } });
   if (member) {
     res.status(202).json(NEUTRAL);
     return;
@@ -77,12 +93,13 @@ export const startApplication = async (req: Request, res: Response): Promise<voi
   const link = newResumeToken();
   const existing = await prisma.application.findUnique({ where: { email_window_id: { email: b.email, window_id: window.id } } });
   // An unfinished draft from an earlier window moves forward instead of starting again.
-  const carried = existing ?? (await prisma.application.findFirst({ where: { email: b.email, status: 'draft' }, orderBy: { created_at: 'desc' } }));
+  // Test drafts never move, and real drafts never move into a test window.
+  const carried = existing ?? (isTest ? null : await prisma.application.findFirst({ where: { email: b.email, status: 'draft', window: { is_test: false } }, orderBy: { created_at: 'desc' } }));
 
   if (carried) {
     await prisma.application.update({
       where: { id: carried.id },
-      data: { window_id: carried.status === 'draft' ? window.id : carried.window_id, resume_token_hash: link.hash, resume_expires_at: link.expires },
+      data: { window_id: carried.status === 'draft' && !isTest ? window.id : carried.window_id, resume_token_hash: link.hash, resume_expires_at: link.expires },
     });
   } else {
     await createWithReference((reference) =>
@@ -93,14 +110,15 @@ export const startApplication = async (req: Request, res: Response): Promise<voi
           interests: [], current_skills: [], learning_goals: [],
           resume_token_hash: link.hash, resume_expires_at: link.expires,
         },
-      })
+      }),
+      isTest ? 'TEST' : 'TX'
     );
-    // A reapplication restarts the clock on any earlier declined record.
-    await prisma.application.updateMany({ where: { email: b.email, status: 'declined' }, data: { retention_delete_at: null } });
+    // A reapplication restarts the clock on any earlier declined record. A rehearsal is not a reapplication.
+    if (!isTest) await prisma.application.updateMany({ where: { email: b.email, status: 'declined' }, data: { retention_delete_at: null } });
   }
 
   try {
-    await sendApplicationLink(b.email, link.token);
+    await sendApplicationLink(b.email, link.token, isTest);
   } catch (err) {
     console.error('Application link email failed:', err);
   }
@@ -118,11 +136,11 @@ export const lookupStatus = async (req: Request, res: Response): Promise<void> =
     if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
       await sendLookupMember(email);
     } else {
-      const latest = await prisma.application.findFirst({ where: { email, status: { not: 'withdrawn' } }, orderBy: { created_at: 'desc' } });
+      const latest = await prisma.application.findFirst({ where: { email, status: { not: 'withdrawn' } }, orderBy: { created_at: 'desc' }, include: { window: { select: { is_test: true } } } });
       if (latest) {
         const link = newResumeToken();
         await prisma.application.update({ where: { id: latest.id }, data: { resume_token_hash: link.hash, resume_expires_at: link.expires } });
-        await sendApplicationLink(email, link.token);
+        await sendApplicationLink(email, link.token, latest.window.is_test);
       } else {
         await sendLookupNone(email);
       }
@@ -160,6 +178,7 @@ const carryForward = async (app: Application): Promise<Application> => {
   if (app.status !== 'draft') return app;
   const open = await findOpenWindow();
   if (!open || open.id === app.window_id) return app;
+  if (await windowIsTest(app.window_id)) return app;
   const clash = await prisma.application.findUnique({ where: { email_window_id: { email: app.email, window_id: open.id } } });
   if (clash) return app;
   return prisma.application.update({ where: { id: app.id }, data: { window_id: open.id } });
@@ -196,12 +215,12 @@ export const submitApplication = async (req: ApplicantRequest, res: Response): P
 
   const updated = await prisma.application.update({ where: { id: app.id }, data: { status: 'submitted', submitted_at: new Date() } });
   try {
-    await sendApplicationReceived(updated.email, updated.reference);
+    await sendApplicationReceived(updated.email, updated.reference, window.is_test);
   } catch (err) {
     console.error('Application receipt email failed:', err);
   }
   const admins = await prisma.user.findMany({ where: { role: 'admin' }, select: { id: true } });
-  await Promise.all(admins.map((a) => createNotification(a.id, 'application', `New application ${updated.reference}`, { link: '/admin/applications' })));
+  await Promise.all(admins.map((a) => createNotification(a.id, 'application', `${window.is_test ? '[TEST] ' : ''}New application ${updated.reference}`, { link: '/admin/applications' })));
   res.json({ ...(await view(updated)), message: 'Submitted. This is not an acceptance: results are released on the decision date.' });
 };
 
@@ -302,7 +321,7 @@ export const respondToOffer = async (req: Request, res: Response): Promise<void>
   await audit(null, 'application.waitlist_response', { type: 'application', id: app.id }, { accept });
   if (invite) {
     try {
-      await sendAcceptance(app.email, invite.token, INVITE_DAYS);
+      await sendAcceptance(app.email, invite.token, INVITE_DAYS, await windowIsTest(app.window_id));
     } catch (err) {
       console.error('Acceptance email failed:', err);
     }

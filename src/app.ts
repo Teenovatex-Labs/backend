@@ -40,6 +40,7 @@ import { adminChallengesRouter, challengesRouter } from './routes/challenges.js'
 import { adminPairingRouter, pairingRouter } from './routes/pairing.js';
 import { adminMembershipRouter, membershipRouter } from './routes/membership.js';
 import adminCohortsRouter from './routes/adminCohorts.js';
+import adminHistoryRouter from './routes/adminHistory.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
 
 const app = express();
@@ -76,6 +77,7 @@ app.use(`${v1}/learn`, learnRouter);
 app.use(`${v1}/reports`, reportsRouter);
 app.use(`${v1}/blocks`, blocksRouter);
 app.use(`${v1}/admin/cohorts`, adminCohortsRouter);
+app.use(`${v1}/admin/admissions-history`, adminHistoryRouter);
 app.use(`${v1}/admin/seasons`, seasonsRouter);
 app.use(`${v1}/seasons`, publicSeasonsRouter);
 app.use(`${v1}/admin/point-rules`, pointRulesRouter);
