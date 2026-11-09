@@ -16,6 +16,7 @@ export const startApplicationSchema = z.object({
   whatsapp: phone,
   school: z.string().trim().max(160).nullable().optional(),
   education_level: text(60, 'Education level'),
+  test_key: z.string().trim().min(10).max(80).optional(),
 });
 
 export const updateDraftSchema = z
@@ -75,6 +76,11 @@ export const reverseSchema = z.object({
 export const secondReviewSchema = z.object({ reviewer_id: z.string().uuid() });
 export const clarificationSchema = z.object({ question: z.string().trim().min(5).max(1500) });
 export const clarificationReplySchema = z.object({ response: z.string().trim().min(1).max(4000) });
+export const createTestCohortSchema = z.object({
+  days: z.number().int().min(1).max(14).default(7),
+  note: z.string().trim().max(500).nullable().optional(),
+});
+
 export const releaseSchema = z.object({ allow_undecided: z.boolean().optional() });
 
 export const guardianSchema = z.object({ parent_email: z.string().trim().toLowerCase().email().max(200) });

@@ -67,7 +67,7 @@ export const extendOnboarding = async (req: AuthRequest, res: Response): Promise
 /** A bio to start from, built from the member's application. They can change every word before saving. */
 export const profileSuggestion = async (req: AuthRequest, res: Response): Promise<void> => {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId }, select: { email: true, full_name: true } });
-  const application = await prisma.application.findFirst({ where: { email: user.email, status: 'accepted' }, orderBy: { submitted_at: 'desc' }, select: { interests: true, learning_goals: true } });
+  const application = await prisma.application.findFirst({ where: { email: user.email, status: 'accepted', window: { is_test: false } }, orderBy: { submitted_at: 'desc' }, select: { interests: true, learning_goals: true } });
   res.json({ bio: suggestBio(user.full_name.split(' ')[0] ?? 'there', application?.interests ?? [], application?.learning_goals ?? []) });
 };
 

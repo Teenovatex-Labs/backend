@@ -11,25 +11,40 @@ import { removePdf } from '../lib/pdfStore.js';
 // only the reference and the reason, never anything the applicant wrote.
 // Not covered, because the policy is undefined: drafts that were never submitted.
 
-const deleteApplication = async (id: string, reference: string, reason: string) => {
+export const deleteApplication = async (id: string, reference: string, reason: string, window_id?: string) => {
   const files = await prisma.applicationAttachment.findMany({ where: { application_id: id, public_id: { not: null } }, select: { public_id: true, kind: true } });
   await prisma.$transaction(async (tx) => {
     await tx.invitation.deleteMany({ where: { application_id: id, used_at: null } });
     await tx.application.delete({ where: { id } });
-    await audit(null, 'application.purge', { type: 'application', id }, { reference, reason }, tx);
+    await audit(null, 'application.purge', { type: 'application', id }, { reference, reason, ...(window_id && { window_id }) }, tx);
   });
   // Applicant photos go with the application; a missing file is not worth failing the purge over.
   for (const f of files) await (f.kind === 'pdf' ? removePdf : deletePrivateImage)(f.public_id!);
 };
 
-export async function runRetention(now: Date = new Date()): Promise<{ declined: number; consent: number; expired_consents: number }> {
+/** Removes a test window and everything in it. Refuses to touch a real window. */
+export const purgeTestWindow = async (windowId: string, reason = 'test window purged'): Promise<number> => {
+  const w = await prisma.applicationWindow.findUnique({ where: { id: windowId }, select: { is_test: true } });
+  if (!w?.is_test) throw new Error('Only a test window can be purged');
+  const apps = await prisma.application.findMany({ where: { window_id: windowId }, select: { id: true, reference: true } });
+  for (const a of apps) await deleteApplication(a.id, a.reference, reason, windowId);
+  await prisma.applicationReminder.deleteMany({ where: { window_id: windowId } });
+  await prisma.applicationWindow.delete({ where: { id: windowId } });
+  await audit(null, 'cohort.purge_test', { type: 'application_window', id: windowId }, { applications: apps.length, reason });
+  return apps.length;
+};
+
+/** Test windows are rehearsals, so they do not linger: two weeks after one closes it is purged. */
+export const TEST_WINDOW_KEEP_MS = 14 * 24 * 60 * 60 * 1000;
+
+export async function runRetention(now: Date = new Date()): Promise<{ declined: number; consent: number; expired_consents: number; test_windows: number }> {
   // A pending confirmation that ran out of time is marked as such, so the record says what happened.
   const expired = await prisma.guardianConsent.updateMany({ where: { status: 'pending', expires_at: { lte: now } }, data: { status: 'expired' } });
 
   let declined = 0;
-  const due = await prisma.application.findMany({ where: { status: 'declined', retention_delete_at: { lte: now } }, select: { id: true, reference: true } });
+  const due = await prisma.application.findMany({ where: { status: 'declined', retention_delete_at: { lte: now } }, select: { id: true, reference: true, window_id: true } });
   for (const a of due) {
-    await deleteApplication(a.id, a.reference, 'declined, retention period ended');
+    await deleteApplication(a.id, a.reference, 'declined, retention period ended', a.window_id);
     declined++;
   }
 
@@ -42,10 +57,17 @@ export async function runRetention(now: Date = new Date()): Promise<{ declined: 
     if (!needsGuardian(a.birth_date) || a.consent?.status === 'confirmed') continue;
     const usable = a.invitations.some((i) => !i.revoked_at && i.expires_at > now);
     if (usable) continue;
-    await deleteApplication(a.id, a.reference, 'guardian confirmation not completed');
+    await deleteApplication(a.id, a.reference, 'guardian confirmation not completed', a.window_id);
     consent++;
   }
-  return { declined, consent, expired_consents: expired.count };
+
+  let test_windows = 0;
+  const stale = await prisma.applicationWindow.findMany({ where: { is_test: true, closes_at: { lte: new Date(now.getTime() - TEST_WINDOW_KEEP_MS) } }, select: { id: true } });
+  for (const w of stale) {
+    await purgeTestWindow(w.id, 'test window expired');
+    test_windows++;
+  }
+  return { declined, consent, expired_consents: expired.count, test_windows };
 }
 
 /** Starts the hourly scan. Returns a stop function. */

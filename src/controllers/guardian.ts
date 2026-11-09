@@ -4,6 +4,8 @@ import { audit } from '../lib/audit.js';
 import { sendGuardianRequest } from '../lib/admissionsEmail.js';
 import { CONSENT_TEXT, CONSENT_TEXT_VERSION, needsGuardian, newConsentToken } from '../lib/guardian.js';
 import { HttpError } from '../lib/errors.js';
+import { windowIsTest } from '../lib/admissions.js';
+import { TEST_EMAIL_HELP, testRecipientAllowed } from '../lib/testWindow.js';
 import { hashToken } from '../lib/tokens.js';
 import type { ApplicantRequest } from '../middleware/applicant.js';
 
@@ -17,6 +19,9 @@ export const requestGuardian = async (req: ApplicantRequest, res: Response): Pro
   if (!needsGuardian(app.birth_date)) throw new HttpError(409, 'NOT_NEEDED', 'You do not need a parent or guardian to confirm.');
   if (parent_email.toLowerCase() === app.email.toLowerCase()) throw new HttpError(422, 'SAME_EMAIL', 'Use your parent or guardian’s own email address, not yours.');
 
+  const test = await windowIsTest(app.window_id);
+  if (test && !(await testRecipientAllowed(parent_email))) throw new HttpError(422, 'TEST_EMAIL_NOT_ALLOWED', TEST_EMAIL_HELP);
+
   // The confirmation lives as long as the invitation it unlocks.
   const invite = await prisma.invitation.findFirst({ where: { application_id: app.id, used_at: null, revoked_at: null, expires_at: { gt: new Date() } }, orderBy: { created_at: 'desc' } });
   if (!invite) throw new HttpError(409, 'INVITE_EXPIRED', 'Your invitation has expired.');
@@ -29,7 +34,7 @@ export const requestGuardian = async (req: ApplicantRequest, res: Response): Pro
   await prisma.guardianConsent.upsert({ where: { application_id: app.id }, create: { application_id: app.id, ...data }, update: data });
   const days = Math.max(1, Math.ceil((invite.expires_at.getTime() - Date.now()) / 86_400_000));
   try {
-    await sendGuardianRequest(parent_email, firstName(app.full_name), t.token, days);
+    await sendGuardianRequest(parent_email, firstName(app.full_name), t.token, days, test);
   } catch (err) {
     console.error('Guardian email failed:', err);
   }
