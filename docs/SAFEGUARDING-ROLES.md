@@ -24,7 +24,7 @@ TeenovateX members are teenagers (13+). Every rule below is enforced on the serv
 - A tutor can message only students enrolled in their own class, only inside the class chat. Moderators can review class chats. **No private messages from tutors to students.**
 - A tutor sees enrolled students' names, attendance and progress for their own classes. Not birth dates, locations, email or other classes.
 - A tutor never sees other members, applications, or reports.
-- **Class link (owner decision 2026-11-09):** each class has a meeting link that the host (tutor) adds. Links are allowed in class chats. A second person may join a class session. Open item: whether a second person is required when an adult tutor teaches minors.
+- **Class link (owner decision 2026-11-09):** each class has a meeting link that the host (tutor) adds. Links are allowed in class chats. A second person may join a class session. **Required (owner decision 2026-11-09):** when a tutor aged 18 or over teaches any student under 18, a second person (another vetted tutor, a moderator or an admin) must be in the session. Teenagers teaching teenagers do not need one.
 - **Tutor age (owner decision 2026-11-09):** a tutor can be any age, as long as they are an accepted member (13+). A tutor under the guardian threshold needs guardian confirmation like any member. Age does not change the rules above: class chat only, no private messages to students.
 
 ## C. Vetting and approval of tutors and partners
@@ -32,7 +32,15 @@ TeenovateX members are teenagers (13+). Every rule below is enforced on the serv
 2. An admin records the checks done (identity, references, and any background check the owner requires) in the audit log.
 3. A second admin approves (owner accepted two-admin approval, 2026-11-09; the owner names the second admin). The role is applied only when the invitation is accepted with the verified email.
 4. An admin can suspend or revoke at any time. Every step is audited.
-Open item: the exact background check required in each country (owner and counsel).
+
+Checks required for every tutor and partner contact, whatever their age or country (owner decision 2026-11-09):
+- A photo ID, checked by an admin, which also confirms age.
+- Two references, at least one from an adult who knows them.
+- Acceptance of the code of conduct.
+- A probation period: a moderator or admin joins the tutor's first class.
+- A police clearance or equivalent is **optional** and only for tutors aged 18 or over, where one is obtainable in their country. It is never a reason to turn away someone who cannot get one.
+- The second approving admin is Shazily (named by the owner). The owner assigns the admin role to her account.
+Open item: counsel to review whether this is enough for adult tutors of minors.
 
 ## D. Retention and deletion
 - Account deletion deletes the member's content, except files kept as escalated evidence (see `SAFEGUARDING.md`).
@@ -41,7 +49,8 @@ Open item: the exact background check required in each country (owner and counse
 
 ## E. Incidents
 - Serious safety matters (abuse, grooming, threats of harm, self-harm): follow `SAFEGUARDING.md`. Only the **designated safeguarding personnel** are notified, never every reviewer or moderator.
-- A named deputy covers when the lead is unavailable. Open item: name the deputy.
+- A named deputy covers when the lead is unavailable. Open item: the owner to confirm who the deputy is (the second approving admin may or may not be the same person).
+- Reporting channel (owner decision 2026-11-09): serious matters are reported from the official teenovatex.org email. Open item: the exact mailbox address to record here.
 - Reporting to authorities follows the law in the relevant country. **Counsel must confirm the channel and the retention period before launch.**
 - Record the audit entry id and the date reported.
 
