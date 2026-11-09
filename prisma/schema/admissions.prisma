@@ -98,13 +98,13 @@ model ApplicationWindow {
 }
 
 model Application {
-  id        String            @id @default(uuid())
+  id           String            @id @default(uuid())
   // Shown to the applicant, for example TX-2026-00024.
-  reference String            @unique
-  window_id String
-  status    ApplicationStatus @default(draft)
+  reference    String            @unique
+  window_id    String
+  status       ApplicationStatus @default(draft)
   // How many of Alfred's questions the applicant has skipped.
-  alfred_skips Int @default(0)
+  alfred_skips Int               @default(0)
 
   email             String
   email_verified_at DateTime?
@@ -128,33 +128,33 @@ model Application {
   resume_token_hash String?   @unique
   resume_expires_at DateTime?
 
-  submitted_at        DateTime?
+  submitted_at              DateTime?
   // Set when an admin claims it; from then on the applicant can no longer edit freely.
-  claimed_by          String?
-  claimed_at          DateTime?
-  locked_at           DateTime?
-  second_reviewer_id  String?
-  decided_by          String?
-  decided_at          DateTime?
+  claimed_by                String?
+  claimed_at                DateTime?
+  locked_at                 DateTime?
+  second_reviewer_id        String?
+  decided_by                String?
+  decided_at                DateTime?
   // Results stay private until the window's decision date.
-  published_at        DateTime?
+  published_at              DateTime?
   // Set when a reviewer invites the applicant to a short call. It changes no status and no decision.
-  interview_invited_at DateTime?
+  interview_invited_at      DateTime?
   // A waitlist place offered by hand. The applicant has 72 hours to accept or decline.
   waitlist_offer_hash       String?   @unique
   waitlist_offer_sent_at    DateTime?
   waitlist_offer_expires_at DateTime?
   waitlist_offer_response   String?
-  decision_note       String?
-  decline_feedback    String?
-  withdrawn_at        DateTime?
+  decision_note             String?
+  decline_feedback          String?
+  withdrawn_at              DateTime?
   // AI summary for reviewers. Advisory only.
-  ai_summary          Json?
-  ip_hash             String?
+  ai_summary                Json?
+  ip_hash                   String?
   // Declined data is deleted after this date (6 months; a reapplication resets it).
-  retention_delete_at DateTime?
-  created_at          DateTime  @default(now())
-  updated_at          DateTime  @updatedAt
+  retention_delete_at       DateTime?
+  created_at                DateTime  @default(now())
+  updated_at                DateTime  @updatedAt
 
   window         ApplicationWindow          @relation(fields: [window_id], references: [id])
   answers        ApplicationAnswer[]

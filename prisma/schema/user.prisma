@@ -8,24 +8,24 @@ enum Role {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  username      String    @unique
+  id                 String    @id @default(uuid())
+  username           String    @unique
   // False for Google sign-ups until the member picks their own handle (they get a placeholder).
-  username_set  Boolean   @default(true)
-  full_name     String
-  email         String    @unique
-  password_hash String?
-  google_id     String?   @unique
-  avatar_url    String?
-  bio           String?
+  username_set       Boolean   @default(true)
+  full_name          String
+  email              String    @unique
+  password_hash      String?
+  google_id          String?   @unique
+  avatar_url         String?
+  bio                String?
   // Written during onboarding, shared in the community WhatsApp group, and published when they become active.
   intro              String?
   intro_published_at DateTime?
-  social_links  Json?
+  social_links       Json?
   // Hundredths of a point in the CURRENT season (150 = 1.5). See src/lib/pointsMath.ts.
-  points        Int       @default(0)
-  streak        Int       @default(0)
-  last_login_at DateTime?
+  points             Int       @default(0)
+  streak             Int       @default(0)
+  last_login_at      DateTime?
 
   // Age gate: members must be 13 or older. Only the date is stored (no time), and it is
   // never included in any public profile response.
@@ -91,6 +91,9 @@ model User {
   badge_awards        BadgeAward[]
   challenge_entries   ChallengeEntry[]
   pairings            PairingMember[]
+  classes_taught      Class[]              @relation("ClassTutor")
+  class_enrollments   Enrollment[]         @relation("ClassEnrollment")
+  class_attendance    Attendance[]         @relation("ClassAttendance")
   inactivity_reviews  InactivityReview[]
 
   // Optional topics a member picks for themselves; admins use them to suggest pairings.
