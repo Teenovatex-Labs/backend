@@ -5,7 +5,7 @@ import { addLink, listMine, removeAttachment, uploadImage, uploadPdf } from '../
 import { requireApplicant } from '../middleware/applicant.js';
 import { attachmentUpload, pdfUpload } from '../middleware/upload.js';
 import { z } from 'zod';
-import { authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
+import { applicantActionLimiter, applicantFailureLimiter, authLimiter, otpRequestLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
 import { answerSchema, clarificationReplySchema, guardianSchema, helpSchema, offerResponseSchema, lookupSchema, reminderSchema, startApplicationSchema, updateDraftSchema } from '../schemas/admissions.js';
 
@@ -18,17 +18,17 @@ router.post('/start', otpRequestLimiter, validate(startApplicationSchema), start
 
 router.post('/lookup', otpRequestLimiter, validate(lookupSchema), lookupStatus);
 
-router.get('/me', authLimiter, requireApplicant, getMyApplication);
+router.get('/me', applicantFailureLimiter, requireApplicant, getMyApplication);
 router.get('/offer/:token', viewOffer);
 router.post('/offer/:token/respond', authLimiter, validate(offerResponseSchema), respondToOffer);
-router.get('/interview', requireApplicant, getInterview);
-router.post('/interview/next', authLimiter, requireApplicant, nextQuestion);
+router.get('/interview', applicantFailureLimiter, requireApplicant, getInterview);
+router.post('/interview/next', applicantFailureLimiter, applicantActionLimiter, requireApplicant, nextQuestion);
 router.put('/interview/answers/:position', requireApplicant, validate(answerSchema), answerQuestion);
-router.post('/interview/:position/help', authLimiter, requireApplicant, validate(helpSchema), questionHelp);
+router.post('/interview/:position/help', applicantFailureLimiter, applicantActionLimiter, requireApplicant, validate(helpSchema), questionHelp);
 router.patch('/draft', requireApplicant, validate(updateDraftSchema), updateDraft);
 router.get('/attachments', requireApplicant, listMine);
-router.post('/attachments/image', authLimiter, requireApplicant, attachmentUpload.single('image'), uploadImage);
-router.post('/attachments/pdf', authLimiter, requireApplicant, pdfUpload.single('pdf'), uploadPdf);
+router.post('/attachments/image', applicantFailureLimiter, applicantActionLimiter, requireApplicant, attachmentUpload.single('image'), uploadImage);
+router.post('/attachments/pdf', applicantFailureLimiter, applicantActionLimiter, requireApplicant, pdfUpload.single('pdf'), uploadPdf);
 router.post('/attachments/link', requireApplicant, validate(z.object({ url: z.string().trim().url().max(300).refine((u) => /^https:\/\//.test(u), 'Links must start with https://') })), addLink);
 router.delete('/attachments/:id', requireApplicant, removeAttachment);
 router.post('/submit', requireApplicant, submitApplication);

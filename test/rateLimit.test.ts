@@ -42,3 +42,22 @@ describe('per-member rate limits', () => {
     expect(other.status).toBe(200);
   });
 });
+
+describe('applicant limits', () => {
+  it('does not count a valid applicant session, but does count wrong links', async () => {
+    const { applicantFailureLimiter } = await import('../src/middleware/rateLimiter.js');
+    const app = express();
+    app.set('trust proxy', 1);
+    app.get('/me', applicantFailureLimiter, (req, res) => {
+      if (req.headers.authorization === 'Bearer good') res.json({ ok: true });
+      else res.status(401).json({ error: 'nope' });
+    });
+    const ip = '203.0.113.77';
+    // Far more valid loads than the old limit of 10 per 15 minutes.
+    for (let i = 0; i < 45; i++) {
+      expect((await request(app).get('/me').set('X-Forwarded-For', ip).set('Authorization', 'Bearer good')).status).toBe(200);
+    }
+    for (let i = 0; i < 30; i++) await request(app).get('/me').set('X-Forwarded-For', ip).set('Authorization', 'Bearer bad');
+    expect((await request(app).get('/me').set('X-Forwarded-For', ip).set('Authorization', 'Bearer bad')).status).toBe(429);
+  });
+});
