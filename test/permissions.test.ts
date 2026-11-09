@@ -21,7 +21,7 @@ const ADMIN_ONLY: Permission[] = [
 ];
 
 describe('can(role, permission)', () => {
-  const roles: Role[] = ['member', 'mentor', 'moderator', 'admin'];
+  const roles: Role[] = ['member', 'mentor', 'moderator', 'admin', 'tutor', 'partner'];
   const all = [...STAFF, ...ADMIN_ONLY];
 
   it.each(roles)('gives %s exactly the expected permissions', (role) => {

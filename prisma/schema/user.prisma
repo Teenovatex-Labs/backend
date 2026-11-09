@@ -3,6 +3,8 @@ enum Role {
   mentor
   moderator
   admin
+  tutor
+  partner
 }
 
 model User {

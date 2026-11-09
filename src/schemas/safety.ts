@@ -18,7 +18,7 @@ export const suspendSchema = z.object({
   reason: z.string().min(3).max(500),
 });
 
-export const roleSchema = z.object({ role: z.enum(['member', 'mentor', 'moderator', 'admin']) });
+export const roleSchema = z.object({ role: z.enum(['member', 'mentor', 'moderator', 'admin', 'tutor', 'partner']) });
 
 const slug = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Use lowercase letters, numbers and dashes').min(2).max(60);
 

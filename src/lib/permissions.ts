@@ -41,6 +41,8 @@ export type Permission = (typeof STAFF_PERMISSIONS)[number] | (typeof ADMIN_ONLY
 const PERMISSIONS: Record<Role, readonly Permission[]> = {
   member: [],
   mentor: [],
+  tutor: [],
+  partner: [],
   moderator: STAFF_PERMISSIONS,
   admin: [...STAFF_PERMISSIONS, ...ADMIN_ONLY_PERMISSIONS],
 };

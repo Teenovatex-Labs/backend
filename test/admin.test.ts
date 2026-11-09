@@ -120,6 +120,17 @@ describe('members', () => {
     expect((await request(app).post(`/api/v1/admin/users/${admin.user.id}/role`).set(admin.auth).send({ role: 'member' })).status).toBe(400);
   });
 
+  it('lets admins set tutor and partner, which carry no staff access', async () => {
+    const { mod, admin, bad } = await setup();
+    for (const role of ['tutor', 'partner'] as const) {
+      expect((await request(app).post(`/api/v1/admin/users/${bad.user.id}/role`).set(mod.auth).send({ role })).status).toBe(403);
+      expect((await request(app).post(`/api/v1/admin/users/${bad.user.id}/role`).set(admin.auth).send({ role })).status).toBe(200);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: bad.user.id } })).role).toBe(role);
+    }
+    const asTutor = await request(app).get('/api/v1/admin/reports').set(bad.auth);
+    expect(asTutor.status).toBe(403);
+  });
+
   it('searches members and shows how many reports each has', async () => {
     const { mod, bad } = await setup();
     const res = await request(app).get(`/api/v1/admin/users?search=${bad.user.username}`).set(mod.auth);
