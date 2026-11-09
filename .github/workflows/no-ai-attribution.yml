@@ -1,0 +1,29 @@
+name: No AI attribution
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Commits (messages, author, committer)
+        run: bash scripts/check-no-ai-attribution.sh range "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}"
+      - name: PR title and body (squash merges copy these into main)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/pr.txt"
+          bash scripts/check-no-ai-attribution.sh text "$RUNNER_TEMP/pr.txt"
+      - name: Branch name (warning only)
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          case "$HEAD_REF" in
+            claude/*|*claude*) echo "::warning::Branch name '$HEAD_REF' contains 'claude'. Prefer feat/, fix/ or docs/." ;;
+          esac

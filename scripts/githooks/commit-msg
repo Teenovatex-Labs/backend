@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Enable once per clone: git config core.hooksPath scripts/githooks
+root=$(git rev-parse --show-toplevel)
+bash "$root/scripts/check-no-ai-attribution.sh" message "$1" || {
+  echo "Commit rejected: remove AI attribution trailers (see CLAUDE.md)." >&2; exit 1; }
+ident=$(git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT)
+if echo "$ident" | grep -qiE 'claude|anthropic'; then
+  echo "Commit rejected: git identity is an AI identity. Set user.name/user.email to a human (see CLAUDE.md)." >&2; exit 1
+fi
