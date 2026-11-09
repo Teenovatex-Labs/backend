@@ -133,7 +133,14 @@ export const startApplication = async (req: Request, res: Response): Promise<voi
 export const lookupStatus = async (req: Request, res: Response): Promise<void> => {
   const { email } = req.body as { email: string };
   try {
-    if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
+    // A rehearsal application is answered as an application even when the address also belongs to a team member
+    // (that is how a tester applies with their own address). Real applicants cannot be members, so nothing else changes.
+    const rehearsal = await prisma.application.findFirst({ where: { email, status: { not: 'withdrawn' }, window: { is_test: true } }, orderBy: { created_at: 'desc' } });
+    if (rehearsal) {
+      const link = newResumeToken();
+      await prisma.application.update({ where: { id: rehearsal.id }, data: { resume_token_hash: link.hash, resume_expires_at: link.expires } });
+      await sendApplicationLink(email, link.token, true);
+    } else if (await prisma.user.findUnique({ where: { email }, select: { id: true } })) {
       await sendLookupMember(email);
     } else {
       const latest = await prisma.application.findFirst({ where: { email, status: { not: 'withdrawn' } }, orderBy: { created_at: 'desc' }, include: { window: { select: { is_test: true } } } });
