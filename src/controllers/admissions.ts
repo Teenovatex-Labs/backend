@@ -19,7 +19,7 @@ import {
 import { audit } from '../lib/audit.js';
 import { hashToken } from '../lib/tokens.js';
 import { sendAcceptance, sendApplicationLink, sendApplicationReceived, sendLookupMember, sendLookupNone } from '../lib/admissionsEmail.js';
-import { ANSWER_MAX, ensureNextQuestion, helpWithQuestion, interviewState, MAX_SKIPS, saveAnswer } from '../lib/alfred/interview.js';
+import { ANSWER_MAX, ensureNextQuestion, helpWithQuestion, interviewState, leadIn, MAX_SKIPS, saveAnswer } from '../lib/alfred/interview.js';
 import { needsGuardian } from '../lib/guardian.js';
 import { TEST_EMAIL_HELP, testRecipientAllowed } from '../lib/testWindow.js';
 import { createNotification } from '../lib/notify.js';
@@ -263,7 +263,7 @@ export const nextQuestion = async (req: ApplicantRequest, res: Response): Promis
   if (!(app.status === 'draft' || (app.status === 'submitted' && !app.locked_at))) throw new HttpError(409, 'APPLICATION_LOCKED', 'This application is being reviewed and can no longer be edited.');
   const q = await ensureNextQuestion(app);
   const state = await interviewState(app);
-  res.json({ ...state, next: q ? { position: q.position, question: q.question_text, format: q.format, spec: (q.spec as object | null) ?? null } : null });
+  res.json({ ...state, next: q ? { position: q.position, question: q.question_text, format: q.format, spec: (q.spec as object | null) ?? null, kind: q.kind, lead_in: leadIn(q) } : null });
 };
 
 export const answerQuestion = async (req: ApplicantRequest, res: Response): Promise<void> => {
@@ -276,6 +276,14 @@ export const answerQuestion = async (req: ApplicantRequest, res: Response): Prom
   if (!result) throw new HttpError(404, 'NOT_FOUND', 'There is no such question.');
   if ('invalid' in result) throw new HttpError(422, 'INVALID_ANSWER', result.invalid ?? 'That answer does not fit the question.');
   res.json({ saved: true, safety_message: result.safety, ...(await interviewState(app)) });
+};
+
+/** How the applicant wants Alfred to talk. Their choice only: it changes his wording, never anything a reviewer sees. */
+export const setTone = async (req: ApplicantRequest, res: Response): Promise<void> => {
+  const app = await carryForward(req.application!);
+  const { tone } = req.body as { tone: 'playful' | 'balanced' | 'plain' };
+  const fresh = await prisma.application.update({ where: { id: app.id }, data: { alfred_tone: tone } });
+  res.json(await interviewState(fresh));
 };
 
 export const questionHelp = async (req: ApplicantRequest, res: Response): Promise<void> => {

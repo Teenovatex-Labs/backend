@@ -83,7 +83,7 @@ export const BANK: Record<Criterion, BankQuestion[]> = {
 };
 
 /** The hard ceiling on questions. Alfred may stop earlier once every criterion has evidence; he never goes past this. */
-export const TOTAL_QUESTIONS = 8;
+export const TOTAL_QUESTIONS = 10;
 
 /**
  * Which criterion the next question gathers evidence for. The first six cover every criterion once, so
@@ -101,21 +101,32 @@ export const MIN_QUESTIONS = 6;
 export const isEvidence = (text: string): boolean => text.trim().length >= 60 && text.trim().split(/\s+/).length >= 8;
 
 /** The criteria that already have at least one real answer. */
-export const covered = (answers: { criterion: string | null; text: string }[]): Criterion[] =>
-  CRITERIA.filter((c) => answers.some((a) => a.criterion === c && isEvidence(a.text)));
+export type Evidence = { criterion: string | null; text: string; /** Other criteria the answer plausibly showed (steering only). */ signals?: string[] | null };
+export const covered = (answers: Evidence[]): Criterion[] =>
+  CRITERIA.filter((c) => answers.some((a) => isEvidence(a.text) && (a.criterion === c || (a.signals ?? []).includes(c))));
 
 /** Alfred has heard enough: at least the minimum asked, and every criterion has real evidence. */
-export const enoughEvidence = (answers: { criterion: string | null; text: string }[]): boolean => answers.length >= MIN_QUESTIONS && covered(answers).length === CRITERIA.length;
+export const enoughEvidence = (answers: Evidence[]): boolean => answers.length >= MIN_QUESTIONS && covered(answers).length === CRITERIA.length;
 
 /**
  * Which criterion the next question is for. The first six go through every criterion once. After that, Alfred goes back
  * to whatever still has no real evidence, heaviest weight first, and only then to the heaviest criterion again.
  */
-export const nextCriterion = (position: number, answers: { criterion: string | null; text: string }[]): Criterion => {
+export const nextCriterion = (position: number, answers: Evidence[]): Criterion => {
   if (position <= CRITERIA.length) return criterionFor(position);
   const have = new Set(covered(answers));
   const missing = CRITERIA.filter((c) => !have.has(c)).sort((a, b) => RUBRIC[b] - RUBRIC[a]);
   return missing[0] ?? 'initiative_action';
+};
+
+/**
+ * What the next AI turn should be after. An easy, curious opener first; then whatever still has no real evidence, heaviest
+ * weight first (a follow-up on the same thread can still earn credit for several criteria at once); then the heaviest again.
+ */
+export const focusFor = (position: number, answers: Evidence[]): Criterion => {
+  if (position === 1) return 'curiosity_creativity';
+  const have = new Set(covered(answers));
+  return CRITERIA.filter((c) => !have.has(c)).sort((a, b) => RUBRIC[b] - RUBRIC[a])[0] ?? 'initiative_action';
 };
 
 export type Fit = {

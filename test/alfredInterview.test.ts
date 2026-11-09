@@ -84,13 +84,13 @@ describe('Alfred interview', () => {
     await next(auth);
     const rows = await prisma.applicationAnswer.findMany({ where: { application_id: a.id }, orderBy: { position: 'asc' } });
     expect(rows.map((r) => r.source)).toEqual(['fallback', 'fallback', 'fallback']);
-    expect(gen.calls.length).toBe(2); // none once the switch was off
+    expect(gen.calls.length).toBe(3); // the bad draft earned one retry; none once the switch was off
   });
 
   it('records edits as revisions and lets a full set be submitted', async () => {
     const { auth, a } = await setup();
     config.admissionsAiEnabled = false;
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 10; i++) {
       const q = await next(auth);
       expect((await request(app).put(`/api/v1/applications/interview/answers/${q.body.next.position}`).set(auth).send(answerFor(q.body.next, `Answer ${i}`))).status).toBe(200);
     }
@@ -99,20 +99,22 @@ describe('Alfred interview', () => {
     const row = await prisma.applicationAnswer.findFirstOrThrow({ where: { application_id: a.id, position: 1 } });
     expect(row.revision).toBe(2);
     expect(await prisma.applicationAnswerRevision.count({ where: { answer_id: row.id } })).toBe(1);
-    expect((await request(app).get('/api/v1/applications/interview').set(auth)).body).toMatchObject({ answered: 8, complete: true, can_submit: true });
+    expect((await request(app).get('/api/v1/applications/interview').set(auth)).body).toMatchObject({ answered: 10, complete: true, can_submit: true });
   });
 
   it('stops early once every criterion has a real answer, but never before six questions', async () => {
     const { auth } = await setup();
     const long = 'I took apart an old radio and tried to work out how every little part did its job.';
+    const asks = ['What would you rewire first inside that old radio?', 'Your chess club loses every match. Who do you move to board one?', 'A cake collapses ten minutes before the guests arrive. What now?', 'The school play has no lighting budget. What is your plan?', 'A friend wants to fix a bike with duct tape. Do you stop them?', 'Drone footage of your street looks boring. How do you make it interesting?'];
     for (let i = 1; i <= 6; i++) {
+      gen.reply = JSON.stringify({ question: asks[i - 1], shows: [] });
       const q = await next(auth);
       expect(q.body.next.position).toBe(i);
       expect((await answer(auth, i, long)).body.complete).toBe(i === 6);
     }
     const done = await next(auth);
     expect(done.body.next).toBeNull();
-    expect(done.body).toMatchObject({ answered: 6, complete: true, can_submit: true, total: 8 });
+    expect(done.body).toMatchObject({ answered: 6, complete: true, can_submit: true, total: 10 });
   });
 
   it('goes back to a criterion that has only thin answers, up to the maximum of eight', async () => {
