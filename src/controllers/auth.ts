@@ -466,22 +466,41 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
       // on what is now this person's account.
       const hadUnverifiedCredentials = !existingByEmail.email_verified;
 
-      user = await prisma.user.update({
-        where: { id: existingByEmail.id },
-        data: {
-          google_id: payload.sub,
-          avatar_url: existingByEmail.avatar_url ?? payload.picture ?? null,
-          // Google already verified this address, even if a prior
-          // email/password signup attempt here never finished verifying.
-          email_verified: true,
-          ...(hadUnverifiedCredentials && {
-            password_hash: null,
-            verification_code_hash: null,
-            verification_code_expires_at: null,
-            verification_attempts: 0,
-          }),
-        },
-      });
+      // An unverified signup is not an existing member. If admissions is gated,
+      // Google proving email ownership must still consume the acceptance invite.
+      const invitation = hadUnverifiedCredentials && (gateIsOn() || invite_token)
+        ? await checkInvitation(invite_token, payload.email, existingByEmail.id)
+        : null;
+      if (invitation?.problem) {
+        res.status(invitation.problem === 'INVITE_REQUIRED' ? 403 : 400).json({ error: inviteMessage[invitation.problem], code: invitation.problem });
+        return;
+      }
+      const invite = invitation?.invite ?? null;
+
+      const linked = await prisma.$transaction(async (tx) => {
+        if (invite && !(await consumeInvitation(tx, invite.id, existingByEmail.id, invite.used_by === existingByEmail.id))) throw new InviteTaken();
+        const updated = await tx.user.update({
+          where: { id: existingByEmail.id },
+          data: {
+            google_id: payload.sub,
+            avatar_url: existingByEmail.avatar_url ?? payload.picture ?? null,
+            // Google already verified this address, even if a prior
+            // email/password signup attempt here never finished verifying.
+            email_verified: true,
+            ...(hadUnverifiedCredentials && {
+              password_hash: null,
+              verification_code_hash: null,
+              verification_code_expires_at: null,
+              verification_attempts: 0,
+            }),
+            ...(invite && onboardingStart()),
+          },
+        });
+        if (invite) await tx.membershipEvent.create({ data: { user_id: updated.id, to_status: 'onboarding', reason: 'Joined with an invitation' } });
+        return updated;
+      }).catch(inviteTakenTo409(res));
+      if (!linked) return;
+      user = linked;
     } else {
       // A brand-new account: invitation-only once the gate is on. Google has proven the address,
       // so the invitation must have been sent to that same address.

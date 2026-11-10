@@ -30,6 +30,7 @@ export const cleanLink = (raw: string | undefined): string | null => {
 };
 
 export const stepLink = (key: StepKey) =>
+  key === 'conduct' ? new URL('/conduct', config.siteUrl).toString() :
   key === 'whatsapp' ? cleanLink(config.onboarding.whatsappUrl) : key === 'hcb' ? cleanLink(config.onboarding.hcbUrl) : null;
 
 export const INTRO_MIN = 20;

@@ -24,7 +24,24 @@ describe('onboarding', () => {
     expect(res.body.status).toBe('onboarding');
     expect(res.body.steps.map((s: { key: string }) => s.key)).toEqual(['welcome', 'conduct', 'safeguarding', 'profile', 'whatsapp', 'intro', 'hcb']);
     expect(res.body.steps.find((s: { key: string }) => s.key === 'hcb').link).toBe('https://hcb.hackclub.com/donations/start/teenovatex');
+    expect(res.body.steps.find((s: { key: string }) => s.key === 'conduct').link).toBe('https://www.teenovatex.org/conduct');
     expect(res.body.overdue).toBe(false);
+  });
+
+  it('keeps an accepted member out of active community actions until setup is complete', async () => {
+    const { auth, user } = await newcomer();
+    const profile = await request(app).get('/api/v1/users/me').set(auth);
+    expect(profile.body.membership_status).toBe('onboarding');
+    const blocked = await request(app).post('/api/v1/community/spaces/anything/posts').set(auth).send({});
+    expect(blocked.status).toBe(403);
+    expect(blocked.body.code).toBe('ONBOARDING_REQUIRED');
+
+    for (const step of ['welcome', 'conduct', 'safeguarding', 'whatsapp', 'hcb']) await confirm(auth, step);
+    await prisma.user.update({ where: { id: user.id }, data: { bio: 'I like building small web apps.' } });
+    await request(app).put('/api/v1/onboarding/intro').set(auth).send({ intro: 'I build small web apps and want to learn design.' });
+    expect((await request(app).get('/api/v1/users/me').set(auth)).body.membership_status).toBe('active');
+    const unblocked = await request(app).post('/api/v1/community/spaces/anything/posts').set(auth).send({});
+    expect(unblocked.body.code).not.toBe('ONBOARDING_REQUIRED');
   });
 
   it('activates the member once every required step is done, and not before', async () => {

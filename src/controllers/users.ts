@@ -44,6 +44,8 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       suspended_reason: true,
       timezone: true,
       role: true,
+      membership_status: true,
+      onboarding_due_at: true,
       interests: true,
       skills: true,
     },
