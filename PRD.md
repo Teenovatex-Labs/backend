@@ -1,3 +1,5 @@
+> **Superseded - historical document. See docs/PLATFORM.md.**
+
 TX Build-in-Public Platform
 Project Requirements Document (PRD)
 Version: 1.0
