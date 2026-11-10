@@ -102,6 +102,26 @@ describe('invitation-gated registration', () => {
 });
 
 describe('invitation-gated Google sign-in', () => {
+  it('does not turn an unverified signup into an active member without an invitation', async () => {
+    const { user } = await makeUser({ email: 'pending@example.com', email_verified: false, google_id: null });
+    const res = await request(app).post('/api/v1/auth/google').send({ id_token: 'g-pending|pending@example.com' });
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('INVITE_REQUIRED');
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).google_id).toBeNull();
+  });
+
+  it('links an unverified signup only with its invitation and starts onboarding', async () => {
+    const { user } = await makeUser({ email: 'pending@example.com', email_verified: false, google_id: null });
+    const token = await invite('pending@example.com');
+    const res = await request(app).post('/api/v1/auth/google').send({ id_token: 'g-pending|pending@example.com', invite_token: token });
+    expect(res.status).toBe(200);
+    const linked = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    expect(linked.google_id).toBe('g-pending');
+    expect(linked.membership_status).toBe('onboarding');
+    expect(linked.onboarding_due_at).not.toBeNull();
+    expect((await prisma.invitation.findFirstOrThrow()).used_by).toBe(user.id);
+  });
+
   it('refuses a new Google account with no invitation', async () => {
     const res = await request(app).post('/api/v1/auth/google').send({ id_token: 'g1|new@example.com' });
     expect(res.status).toBe(403);

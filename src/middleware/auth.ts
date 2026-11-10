@@ -67,12 +67,13 @@ export const requirePermission =
 
 /**
  * Gate for anything a member does in public (posting, commenting, voting, RSVPing, following).
- * They must have confirmed their age, chosen a username, and not be suspended.
+ * They must have finished onboarding, confirmed their age, chosen a username,
+ * and not be suspended. Existing accounts default to active.
  */
 export const requireActiveMember = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   const user = await prisma.user.findUnique({
     where: { id: req.userId },
-    select: { birth_date: true, username_set: true, suspended_until: true, suspended_reason: true },
+    select: { birth_date: true, username_set: true, membership_status: true, suspended_until: true, suspended_reason: true },
   });
   if (!user?.birth_date) {
     res.status(403).json({ error: 'Please confirm your date of birth first', code: 'AGE_REQUIRED' });
@@ -80,6 +81,13 @@ export const requireActiveMember = async (req: AuthRequest, res: Response, next:
   }
   if (!user.username_set) {
     res.status(403).json({ error: 'Please choose a username first', code: 'USERNAME_REQUIRED' });
+    return;
+  }
+  if (user.membership_status !== 'active') {
+    res.status(403).json({
+      error: user.membership_status === 'onboarding' ? 'Finish your first week setup before joining in' : 'Your membership is not active right now',
+      code: user.membership_status === 'onboarding' ? 'ONBOARDING_REQUIRED' : 'MEMBERSHIP_INACTIVE',
+    });
     return;
   }
   if (user.suspended_until && user.suspended_until.getTime() > Date.now()) {
