@@ -17,8 +17,8 @@ Each audience gets its own subdomain, and browser tokens are stored per origin, 
 
 1. **Cloudflare CNAME**: add a DNS record for the subdomain pointing to `cname.vercel-dns.com` (DNS only, not proxied / gray-clouded).
 2. **Vercel domain**: add the domain in the Vercel project (Settings → Domains).
-3. **Backend CORS (`FRONTEND_URL`)**: add the origin to `FRONTEND_URL` in `.env` on the VPS (comma-separated list of allowed browser origins).
-4. **Vercel env**: set `NEXT_PUBLIC_*_ORIGIN` on Vercel (e.g. for the new surface in frontend issue #6 / `src/lib/hosts.ts`).
+3. **Backend CORS (`FRONTEND_URL`)**: add the origin to `FRONTEND_URL` in `.env` on the VPS (comma-separated list of allowed browser origins). Entries in `FRONTEND_URL` must be bare origins, no trailing slash, no wildcards.
+4. **Vercel env**: set `NEXT_PUBLIC_*_ORIGIN` on Vercel (e.g. for the new surface in backend issue #6 / `src/lib/hosts.ts`; the variable name comes from the host registry plan).
 5. **Restart backend**: run `systemctl restart teenovatex-backend` on the VPS so the server reloads `FRONTEND_URL`.
 6. **Verify with a CORS preflight curl**: test that the API allows preflight requests from the new origin:
    ```bash

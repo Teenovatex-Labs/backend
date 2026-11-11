@@ -84,7 +84,7 @@ describe('CORS configuration and origin handling', () => {
       }
     });
 
-    it('rejects an unknown origin by withstanding Access-Control-Allow-Origin header', async () => {
+    it('rejects an unknown origin (no Access-Control-Allow-Origin header)', async () => {
       const unknownOrigins = [
         'https://evil.example.com',
         'https://attacker.org',
