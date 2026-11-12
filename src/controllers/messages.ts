@@ -33,7 +33,7 @@ const person = { select: { id: true, username: true, avatar_url: true } } as con
 /** Loads a conversation only if the member belongs to it. `other` is the second person in a private chat, null in a lab chat. */
 const membership = async (conversationId: string, userId: string) => {
   const convo = await prisma.conversation.findFirst({
-    where: { id: conversationId, members: { some: { user_id: userId } } },
+    where: { id: conversationId, members: { some: { user_id: userId } }, OR: [{ lab_id: null }, { lab: { hidden: false } }] },
     include: { members: { include: { user: person } }, lab: { select: { name: true, slug: true } }, pairing: { select: { id: true, goal: true, status: true, ends_on: true, supervisor_id: true } } },
   });
   if (!convo) throw new HttpError(404, 'NOT_FOUND', 'Conversation not found');
@@ -62,7 +62,7 @@ export const listConversations = async (req: AuthRequest, res: Response): Promis
   const userId = req.userId!;
   const hidden = await blockedEitherWay(userId);
   const convos = await prisma.conversation.findMany({
-    where: { members: { some: { user_id: userId } } },
+    where: { members: { some: { user_id: userId } }, OR: [{ lab_id: null }, { lab: { hidden: false } }] },
     orderBy: { updated_at: 'desc' },
     take: 100,
     include: {
@@ -100,7 +100,7 @@ export const listConversations = async (req: AuthRequest, res: Response): Promis
 export const unreadCount = async (req: AuthRequest, res: Response): Promise<void> => {
   const userId = req.userId!;
   const hidden = await blockedEitherWay(userId);
-  const mine = await prisma.conversationMember.findMany({ where: { user_id: userId }, select: { conversation_id: true, last_read_at: true } });
+  const mine = await prisma.conversationMember.findMany({ where: { user_id: userId, conversation: { OR: [{ lab_id: null }, { lab: { hidden: false } }] } }, select: { conversation_id: true, last_read_at: true } });
   let unread = 0;
   for (const m of mine) {
     unread += await prisma.message.count({
@@ -132,7 +132,7 @@ export const openLabChat = async (req: AuthRequest, res: Response): Promise<void
   const { id } = req.params as { id: string };
   const userId = req.userId!;
   const lab = await prisma.project.findFirst({
-    where: { OR: [{ id }, { slug: id }], members: { some: { user_id: userId } } },
+    where: { hidden: false, OR: [{ id }, { slug: id }], members: { some: { user_id: userId } } },
     select: { id: true, name: true, slug: true, members: { select: { user_id: true } } },
   });
   if (!lab) throw new HttpError(403, 'NOT_ON_TEAM', 'Only the lab team can open its chat');
@@ -345,6 +345,7 @@ export const getImageLink = async (req: AuthRequest, res: Response): Promise<voi
   const isStaff = me?.role === 'moderator' || me?.role === 'admin';
   const isSender = a.uploader_id === userId;
   if (!isStaff) {
+    await membership(a.message.conversation_id, userId);
     const member = await prisma.conversationMember.findUnique({ where: { conversation_id_user_id: { conversation_id: a.message.conversation_id, user_id: userId } } });
     if (!member) throw new HttpError(404, 'NOT_FOUND', 'Image not found');
     const blocked = await blockedEitherWay(userId);

@@ -161,7 +161,7 @@ export const getUserProjects = async (req: AuthRequest, res: Response): Promise<
   if (!canSeeProfile(req.userId, user)) { res.json({ projects: [] }); return; }
 
   const projects = await prisma.project.findMany({
-    where: { user_id: user.id },
+    where: { user_id: user.id, hidden: false },
     orderBy: { created_at: 'desc' },
     include: { user: { select: { username: true, avatar_url: true } } },
   });

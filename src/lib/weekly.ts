@@ -53,10 +53,10 @@ export const progressFor = async (key: string, userId: string, w: Window): Promi
     case 'cheer':
       return prisma.comment.count({ where: { author_id: userId, created_at: between } });
     case 'ship_updates':
-      return (await prisma.labUpdate.count({ where: { author_id: userId, created_at: between } })) +
-        (await prisma.labTask.count({ where: { done_at: between, lab: { members: { some: { user_id: userId } } } } }));
+      return (await prisma.labUpdate.count({ where: { author_id: userId, created_at: between, lab: { hidden: false } } })) +
+        (await prisma.labTask.count({ where: { done_at: between, lab: { hidden: false, members: { some: { user_id: userId } } } } }));
     case 'start_lab':
-      return prisma.project.count({ where: { user_id: userId, created_at: between } });
+      return prisma.project.count({ where: { user_id: userId, hidden: false, created_at: between } });
     case 'show_up':
       return prisma.eventRsvp.count({ where: { user_id: userId, created_at: between } });
     default:

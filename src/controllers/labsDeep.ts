@@ -15,8 +15,8 @@ const author = { select: { username: true, avatar_url: true } } as const;
 type Lab = { id: string; slug: string; name: string; user_id: string };
 
 const loadLab = async (idOrSlug: string): Promise<Lab> => {
-  const lab = await prisma.project.findUnique({
-    where: UUID.test(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug },
+  const lab = await prisma.project.findFirst({
+    where: { ...(UUID.test(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug }), hidden: false },
     select: { id: true, slug: true, name: true, user_id: true },
   });
   if (!lab) throw new HttpError(404, 'NOT_FOUND', 'Lab not found');
@@ -191,7 +191,7 @@ export const deleteTask = async (req: AuthRequest, res: Response): Promise<void>
 export const myTasks = async (req: AuthRequest, res: Response): Promise<void> => {
   const memberships = await prisma.labMember.findMany({ where: { user_id: req.userId }, select: { lab_id: true } });
   const tasks = await prisma.labTask.findMany({
-    where: { lab_id: { in: memberships.map((m) => m.lab_id) }, status: { not: 'done' }, OR: [{ assignee_id: req.userId }, { assignee_id: null }] },
+    where: { lab_id: { in: memberships.map((m) => m.lab_id) }, lab: { hidden: false }, status: { not: 'done' }, OR: [{ assignee_id: req.userId }, { assignee_id: null }] },
     orderBy: [{ due_at: { sort: 'asc', nulls: 'last' } }, { created_at: 'asc' }],
     take: 20,
     include: { lab: { select: { name: true, slug: true } } },

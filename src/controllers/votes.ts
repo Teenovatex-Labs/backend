@@ -22,7 +22,7 @@ export const castVote = async (req: AuthRequest, res: Response): Promise<void> =
   const { id: project_id } = req.params as { id: string };
   const userId = req.userId!;
 
-  const project = await prisma.project.findUnique({ where: { id: project_id } });
+  const project = await prisma.project.findFirst({ where: { id: project_id, hidden: false } });
   if (!project) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
 
   const timezone = await timezoneOf(userId);
@@ -40,7 +40,7 @@ export const castVote = async (req: AuthRequest, res: Response): Promise<void> =
 
       await tx.vote.create({ data: { user_id: userId, project_id, vote_day } });
       const updated = await tx.project.update({
-        where: { id: project_id },
+        where: { id: project_id, hidden: false },
         data: { vote_count: { increment: 1 } },
       });
 

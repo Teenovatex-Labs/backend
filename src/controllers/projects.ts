@@ -87,6 +87,7 @@ export const listProjects = async (req: AuthRequest, res: Response): Promise<voi
   const skip = (pageNum - 1) * limitNum;
 
   const where = {
+    hidden: false,
     ...(category ? { category } : {}),
     ...(search
       ? {
@@ -117,7 +118,7 @@ export const listProjects = async (req: AuthRequest, res: Response): Promise<voi
           y.created_at.getTime() - x.created_at.getTime()
       )
       .slice(skip, skip + limitNum);
-    const found = await prisma.project.findMany({ where: { id: { in: ranked.map((r) => r.id) } }, include: userInclude });
+    const found = await prisma.project.findMany({ where: { id: { in: ranked.map((r) => r.id) }, hidden: false }, include: userInclude });
     const byId = new Map(found.map((p) => [p.id, p]));
     projects = ranked.map((r) => byId.get(r.id)!).filter(Boolean);
     total = all.length;
@@ -140,7 +141,7 @@ export const listProjects = async (req: AuthRequest, res: Response): Promise<voi
 
 export const listMyProjects = async (req: AuthRequest, res: Response): Promise<void> => {
   const projects = await prisma.project.findMany({
-    where: { user_id: req.userId },
+    where: { user_id: req.userId, hidden: false },
     orderBy: { created_at: 'desc' },
     include: userInclude,
   });
@@ -148,7 +149,7 @@ export const listMyProjects = async (req: AuthRequest, res: Response): Promise<v
 };
 
 export const listCategories = async (_req: Request, res: Response): Promise<void> => {
-  const groups = await prisma.project.groupBy({ by: ['category'], _count: { _all: true }, orderBy: { category: 'asc' } });
+  const groups = await prisma.project.groupBy({ by: ['category'], where: { hidden: false }, _count: { _all: true }, orderBy: { category: 'asc' } });
   res.json({ categories: groups.map((g) => ({ name: g.category, count: g._count._all })) });
 };
 
@@ -158,8 +159,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const getProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
 
-  const project = await prisma.project.findUnique({
-    where: UUID.test(id) ? { id } : { slug: id },
+  const project = await prisma.project.findFirst({
+    where: { ...(UUID.test(id) ? { id } : { slug: id }), hidden: false },
     include: { user: { select: { username: true, full_name: true, avatar_url: true } } },
   });
 
@@ -170,7 +171,7 @@ export const getProject = async (req: AuthRequest, res: Response): Promise<void>
 
 export const updateProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
-  const project = await prisma.project.findUnique({ where: { id } });
+  const project = await prisma.project.findFirst({ where: { id, hidden: false } });
 
   if (!project) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
   if (project.user_id !== req.userId) { res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' }); return; }
@@ -207,7 +208,7 @@ export const updateProject = async (req: AuthRequest, res: Response): Promise<vo
 
 export const deleteProject = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
-  const project = await prisma.project.findUnique({ where: { id } });
+  const project = await prisma.project.findFirst({ where: { id, hidden: false } });
 
   if (!project) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
   if (project.user_id !== req.userId) { res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' }); return; }
@@ -221,7 +222,7 @@ export const deleteProject = async (req: AuthRequest, res: Response): Promise<vo
 /** Puts a new cover on a lab the member owns, or (with no file) says so. */
 export const setCover = async (req: MulterAuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
-  const lab = await prisma.project.findUnique({ where: { id }, select: { user_id: true } });
+  const lab = await prisma.project.findFirst({ where: { id, hidden: false }, select: { user_id: true } });
   if (!lab) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
   if (lab.user_id !== req.userId) { res.status(403).json({ error: 'Forbidden', code: 'FORBIDDEN' }); return; }
   if (!req.file) { res.status(400).json({ error: 'Choose an image first', code: 'NO_FILE' }); return; }
@@ -232,7 +233,7 @@ export const setCover = async (req: MulterAuthRequest, res: Response): Promise<v
 
 export const clearCover = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params as { id: string };
-  const { count } = await prisma.project.updateMany({ where: { id, user_id: req.userId }, data: { cover_url: null } });
+  const { count } = await prisma.project.updateMany({ where: { id, user_id: req.userId, hidden: false }, data: { cover_url: null } });
   if (count === 0) { res.status(404).json({ error: 'Project not found', code: 'NOT_FOUND' }); return; }
   res.json({ cover_url: null });
 };

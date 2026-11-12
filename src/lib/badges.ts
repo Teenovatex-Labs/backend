@@ -24,16 +24,16 @@ export const BADGES: BadgeDef[] = [
 async function qualifying(userId: string): Promise<Set<string>> {
   const [user, labs, votes, posts, comments, updates, lessons, tracks, teamJoins, milestones, voteSum] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { streak: true } }),
-    prisma.project.count({ where: { user_id: userId } }),
+    prisma.project.count({ where: { user_id: userId, hidden: false } }),
     prisma.vote.count({ where: { user_id: userId } }),
     prisma.post.count({ where: { author_id: userId } }),
     prisma.comment.count({ where: { author_id: userId } }),
-    prisma.labUpdate.count({ where: { author_id: userId } }),
+    prisma.labUpdate.count({ where: { author_id: userId, lab: { hidden: false } } }),
     prisma.lessonProgress.count({ where: { user_id: userId } }),
     prisma.track.findMany({ where: { published: true }, select: { id: true, lessons: { select: { id: true } } } }),
-    prisma.labMember.count({ where: { user_id: userId, role: 'member' } }),
-    prisma.labMilestone.count({ where: { done_at: { not: null }, lab: { members: { some: { user_id: userId } } } } }),
-    prisma.project.aggregate({ where: { user_id: userId }, _sum: { vote_count: true } }),
+    prisma.labMember.count({ where: { user_id: userId, role: 'member', lab: { hidden: false } } }),
+    prisma.labMilestone.count({ where: { done_at: { not: null }, lab: { hidden: false, members: { some: { user_id: userId } } } } }),
+    prisma.project.aggregate({ where: { user_id: userId, hidden: false }, _sum: { vote_count: true } }),
   ]);
 
   const done = new Set((await prisma.lessonProgress.findMany({ where: { user_id: userId }, select: { lesson_id: true } })).map((l) => l.lesson_id));
