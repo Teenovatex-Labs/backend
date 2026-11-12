@@ -148,7 +148,7 @@ async function buildContext(userId: string): Promise<string> {
     prisma.user.findUnique({ where: { id: userId }, select: { points: true, streak: true } }),
     prisma.notification.count({ where: { user_id: userId, read: false } }),
     prisma.labTask.findFirst({
-      where: { status: { not: 'done' }, due_at: { gt: now }, lab: { members: { some: { user_id: userId } } }, OR: [{ assignee_id: userId }, { assignee_id: null }] },
+      where: { status: { not: 'done' }, due_at: { gt: now }, lab: { hidden: false, members: { some: { user_id: userId } } }, OR: [{ assignee_id: userId }, { assignee_id: null }] },
       orderBy: { due_at: 'asc' },
       include: { lab: { select: { name: true } } },
     }),

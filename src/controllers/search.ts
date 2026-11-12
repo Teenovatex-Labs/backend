@@ -19,7 +19,7 @@ export const search = async (req: AuthRequest, res: Response): Promise<void> => 
 
   const [labs, people, posts, lessons, events] = await Promise.all([
     prisma.project.findMany({
-      where: { OR: [{ name: contains }, { short_description: contains }, { tags: { has: q.toLowerCase() } }], ...(notHidden ? { user_id: notHidden } : {}) },
+      where: { hidden: false, OR: [{ name: contains }, { short_description: contains }, { tags: { has: q.toLowerCase() } }], ...(notHidden ? { user_id: notHidden } : {}) },
       orderBy: { vote_count: 'desc' },
       take: PER_TYPE,
       select: { id: true, name: true, slug: true, short_description: true, category: true, vote_count: true, user: { select: { username: true } } },

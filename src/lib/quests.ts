@@ -31,8 +31,8 @@ const progressFor = async (key: string, userId: string, day: Date, dayStart: Dat
     case 'talk':
       return (await prisma.post.count({ where: { author_id: userId, created_at: between } })) + (await prisma.comment.count({ where: { author_id: userId, created_at: between } }));
     case 'build':
-      return (await prisma.labUpdate.count({ where: { author_id: userId, created_at: between } })) +
-        (await prisma.labTask.count({ where: { done_at: between, lab: { members: { some: { user_id: userId } } } } }));
+      return (await prisma.labUpdate.count({ where: { author_id: userId, created_at: between, lab: { hidden: false } } })) +
+        (await prisma.labTask.count({ where: { done_at: between, lab: { hidden: false, members: { some: { user_id: userId } } } } }));
     default:
       return 0;
   }
