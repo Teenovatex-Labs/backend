@@ -1,10 +1,16 @@
 import type { Response } from 'express';
 import type { AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../db.js';
+import { can } from '../lib/permissions.js';
+
+const visibleTo = async (userId: string | undefined) => {
+  const user = await prisma.user.findUnique({ where: { id: userId! }, select: { role: true } });
+  return user && can(user.role, 'applications.review') ? {} : { type: { not: 'application' as const } };
+};
 
 export const getNotifications = async (req: AuthRequest, res: Response): Promise<void> => {
   const notifications = await prisma.notification.findMany({
-    where: { user_id: req.userId },
+    where: { user_id: req.userId, ...(await visibleTo(req.userId)) },
     orderBy: { created_at: 'desc' },
     take: 50,
   });
@@ -12,7 +18,7 @@ export const getNotifications = async (req: AuthRequest, res: Response): Promise
 };
 
 export const getUnreadCount = async (req: AuthRequest, res: Response): Promise<void> => {
-  const unread = await prisma.notification.count({ where: { user_id: req.userId, read: false } });
+  const unread = await prisma.notification.count({ where: { user_id: req.userId, read: false, ...(await visibleTo(req.userId)) } });
   res.json({ unread });
 };
 
