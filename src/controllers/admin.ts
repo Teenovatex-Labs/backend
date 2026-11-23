@@ -60,7 +60,7 @@ const describeTarget = async (type: string, id: string) => {
     }
     case 'lab': {
       const l = await prisma.project.findUnique({ where: { id }, include: { user: { select: { username: true } } } });
-      return l ? { exists: true, title: l.name, excerpt: l.short_description, author: l.user.username, slug: l.slug } : { exists: false };
+      return l ? { exists: true, title: l.name, excerpt: l.short_description, author: l.user.username, slug: l.slug, hidden: l.hidden } : { exists: false };
     }
     case 'user': {
       const u = await prisma.user.findUnique({ where: { id }, select: { username: true, bio: true } });
@@ -150,7 +150,7 @@ export const resolveReport = async (req: AuthRequest, res: Response): Promise<vo
           await tx.post.update({ where: { id: c.post_id }, data: { comment_count: { decrement: 1 } } });
         }
       } else if (report.target_type === 'message') await tx.message.updateMany({ where: { id: report.target_id }, data: { hidden: true } });
-      else if (report.target_type === 'lab') await tx.project.deleteMany({ where: { id: report.target_id } });
+      else if (report.target_type === 'lab') await tx.project.updateMany({ where: { id: report.target_id }, data: { hidden: true } });
       else throw new HttpError(400, 'UNSUPPORTED_ACTION', 'Content of that type can only be warned or suspended');
     }
     if (action === 'suspend' && report.target_user_id) {

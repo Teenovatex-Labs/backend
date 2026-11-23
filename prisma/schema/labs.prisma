@@ -12,6 +12,7 @@ model Project {
   tx_post_url       String?
   tags              String[]
   vote_count        Int      @default(0)
+  hidden            Boolean  @default(false)
   created_at        DateTime @default(now())
   updated_at        DateTime @updatedAt
 

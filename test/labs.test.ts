@@ -10,6 +10,36 @@ beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 
 describe('labs (projects) reads', () => {
+  it('hides moderated labs from all member discovery and direct lab access', async () => {
+    const owner = await makeUser();
+    const visitor = await makeUser();
+    const visible = await makeProject(owner.user.id, { category: 'web', name: 'Visible Lab' });
+    const hidden = await makeProject(owner.user.id, { category: 'ai', name: 'Hidden Lab', hidden: true });
+    const urls = [
+      '/api/v1/projects',
+      '/api/v1/projects?sort=trending',
+      '/api/v1/projects?search=Lab',
+      '/api/v1/projects/mine',
+      `/api/v1/users/${owner.user.username}/projects`,
+    ];
+    for (const url of urls) {
+      const res = await request(app).get(url).set(owner.auth);
+      expect(res.status, url).toBe(200);
+      expect(res.body.projects.map((p: { id: string }) => p.id), url).toContain(visible.id);
+      expect(res.body.projects.map((p: { id: string }) => p.id), url).not.toContain(hidden.id);
+    }
+    const categories = await request(app).get('/api/v1/projects/categories');
+    expect(categories.body.categories).toEqual([{ name: 'web', count: 1 }]);
+    const search = await request(app).get('/api/v1/search?q=Lab');
+    expect(search.body.labs.map((p: { id: string }) => p.id)).toContain(visible.id);
+    expect(search.body.labs.map((p: { id: string }) => p.id)).not.toContain(hidden.id);
+    for (const id of [hidden.id, hidden.slug]) {
+      expect((await request(app).get(`/api/v1/projects/${id}`)).status).toBe(404);
+      expect((await request(app).get(`/api/v1/projects/${id}/updates`)).status).toBe(404);
+    }
+    expect((await request(app).patch(`/api/v1/projects/${hidden.id}`).set(owner.auth).send({ name: 'Unhide me' })).status).toBe(404);
+    expect((await request(app).post(`/api/v1/projects/${hidden.id}/vote`).set(visitor.auth)).status).toBe(404);
+  });
   it('opens a lab by slug as well as by id', async () => {
     const { user } = await makeUser();
     const lab = await makeProject(user.id, { slug: 'my-first-lab' });

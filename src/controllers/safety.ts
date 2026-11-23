@@ -19,7 +19,7 @@ export const resolveTarget = async (type: string, id: string, reporterId?: strin
       return { user_id: c.author_id };
     }
     case 'lab': {
-      const l = await prisma.project.findUnique({ where: { id }, select: { user_id: true } });
+      const l = await prisma.project.findFirst({ where: { id, hidden: false }, select: { user_id: true } });
       if (!l) throw new HttpError(404, 'NOT_FOUND', 'That lab no longer exists');
       return { user_id: l.user_id };
     }

@@ -31,6 +31,19 @@ describe('admin access', () => {
 });
 
 describe('the report queue', () => {
+  it('hides a reported lab without deleting its data and writes an audit row', async () => {
+    const mod = await makeUser({ role: 'moderator' });
+    const owner = await makeUser();
+    const reporter = await makeUser();
+    const lab = await makeProject(owner.user.id);
+    expect((await request(app).post('/api/v1/reports').set(reporter.auth).send({ target_type: 'lab', target_id: lab.id, reason: 'spam' })).status).toBe(201);
+    const report = await prisma.report.findFirstOrThrow({ where: { target_type: 'lab', target_id: lab.id } });
+    const result = await request(app).post(`/api/v1/admin/reports/${report.id}/resolve`).set(mod.auth).send({ action: 'remove' });
+    expect(result.status).toBe(200);
+    expect((await prisma.project.findUniqueOrThrow({ where: { id: lab.id } })).hidden).toBe(true);
+    expect((await request(app).get(`/api/v1/projects/${lab.id}`)).status).toBe(404);
+    expect(await prisma.auditLog.count({ where: { action: 'report.remove' } })).toBe(1);
+  });
   it('shows what a moderator needs to decide', async () => {
     const { mod } = await setup();
     const res = await request(app).get('/api/v1/admin/reports').set(mod.auth);
