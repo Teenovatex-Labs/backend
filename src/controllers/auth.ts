@@ -28,7 +28,23 @@ import {
 } from '../lib/verification.js';
 import { MIN_AGE, ageOn, toDbDate } from '../lib/age.js';
 import { checkInvitation, consumeInvitation, gateIsOn, inviteMessage, onboardingStart } from '../lib/invitations.js';
+import { permissionsFor } from '../lib/permissions.js';
+import type { Role } from '@prisma/client';
 const REMOVED_MESSAGE = 'This account is no longer active. If you think this is a mistake, contact the TeenovateX team.';
+
+const authUserPayload = (user: { id: string; username: string; avatar_url: string | null; role: Role }) => ({
+  id: user.id,
+  username: user.username,
+  avatar_url: user.avatar_url,
+  role: user.role,
+  permissions: permissionsFor(user.role),
+});
+
+const userForAuthResponse = (id: string) =>
+  prisma.user.findUnique({
+    where: { id },
+    select: { id: true, username: true, avatar_url: true, role: true },
+  });
 
 const googleClient = new OAuth2Client(config.googleClientId);
 
@@ -268,14 +284,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     return;
   }
 
-  await promoteIfAdminEmail(user); // reached only after the email is verified (code, password on a verified account, or Google)
+  if (await promoteIfAdminEmail(user)) user.role = 'admin';
   await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
 
   res.json({
     ...tokens,
-    user: { id: user.id, username: user.username, avatar_url: user.avatar_url },
+    user: authUserPayload(user),
   });
 };
 
@@ -317,7 +333,16 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
       data: { token_hash: hashToken(next), prev_token_hash: token_hash, rotation, rotated_at: now, last_active: now },
     });
     if (rotated.count === 1) {
-      res.json({ access_token: generateAccessToken(decoded.userId), refresh_token: next });
+      const user = await userForAuthResponse(decoded.userId);
+      if (!user) {
+        res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
+        return;
+      }
+      res.json({
+        access_token: generateAccessToken(decoded.userId),
+        refresh_token: next,
+        user: authUserPayload(user),
+      });
       return;
     }
   }
@@ -325,7 +350,16 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
   const previous = await prisma.session.findUnique({ where: { prev_token_hash: token_hash } });
   if (previous?.rotated_at && now.getTime() - previous.rotated_at.getTime() <= REFRESH_GRACE_MS) {
     // The same current token, every time: safe for lost responses and for several tabs.
-    res.json({ access_token: generateAccessToken(decoded.userId), refresh_token: deriveRefreshToken({ ...previous, rotated_at: previous.rotated_at }) });
+    const user = await userForAuthResponse(decoded.userId);
+    if (!user) {
+      res.status(401).json({ error: 'Session expired', code: 'SESSION_EXPIRED' });
+      return;
+    }
+    res.json({
+      access_token: generateAccessToken(decoded.userId),
+      refresh_token: deriveRefreshToken({ ...previous, rotated_at: previous.rotated_at }),
+      user: authUserPayload(user),
+    });
     return;
   }
   if (previous) {
@@ -541,14 +575,14 @@ export const googleAuth = async (req: Request, res: Response): Promise<void> => 
     }
   }
 
-  await promoteIfAdminEmail(user); // reached only after the email is verified (code, password on a verified account, or Google)
+  if (await promoteIfAdminEmail(user)) user.role = 'admin';
   await recordDailyLogin(user);
 
   const tokens = await createSession(user.id, req);
 
   res.json({
     ...tokens,
-    user: { id: user.id, username: user.username, avatar_url: user.avatar_url },
+    user: authUserPayload(user),
   });
 };
 
