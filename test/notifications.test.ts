@@ -10,6 +10,23 @@ beforeEach(resetDb);
 afterAll(() => prisma.$disconnect());
 
 describe('notifications', () => {
+  it('shows application notifications only while the recipient is an admissions admin', async () => {
+    const admin = await makeUser({ role: 'admin' });
+    const member = await makeUser();
+    await createNotification(admin.user.id, 'application', 'New application TX-1', { link: '/admin/applications' });
+    await createNotification(admin.user.id, 'system', 'Hello');
+    await createNotification(member.user.id, 'application', 'New application TX-2', { link: '/admin/applications' });
+
+    const list = () => request(app).get('/api/v1/notifications').set(admin.auth);
+    const count = () => request(app).get('/api/v1/notifications/unread-count').set(admin.auth);
+    expect((await list()).body).toHaveLength(2);
+    expect((await count()).body.unread).toBe(2);
+    expect((await request(app).get('/api/v1/notifications').set(member.auth)).body).toEqual([]);
+
+    await prisma.user.update({ where: { id: admin.user.id }, data: { role: 'member' } });
+    expect((await list()).body.map((n: { type: string }) => n.type)).toEqual(['system']);
+    expect((await count()).body.unread).toBe(1);
+  });
   it('counts unread, marks read and deletes only my own', async () => {
     const me = await makeUser();
     const other = await makeUser();
