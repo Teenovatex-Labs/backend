@@ -1,5 +1,7 @@
 # Safeguarding: images in team chats
 
+> See also: [Safeguarding: roles, admissions, pairing and badges](SAFEGUARDING-ROLES.md) for overarching policy on tutors, partners, applicants, pairing and data retention.
+
 **Moderation contact and reviewer:** Anas Abubakar (admin). Every image is reviewed by a person before the team can see it. There is no automated screening and no third-party image service, so images are never sent anywhere outside our own storage.
 
 ## What is allowed
