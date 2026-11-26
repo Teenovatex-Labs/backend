@@ -42,4 +42,7 @@ jobs:
           timeout: 10m
           command_timeout: 10m
           script: |
-            bash /home/ubuntu/teenovatex/backend/ops/deploy.sh
+            set -e
+            cd /home/ubuntu/teenovatex/backend
+            git pull --ff-only origin main
+            bash ops/deploy.sh
