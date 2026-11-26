@@ -26,4 +26,4 @@ Use the [`.env.example`](.env.example) file as the environment configuration ref
 
 ## Deployment
 
-See [the platform deployment notes](docs/PLATFORM.md). For the backend, after pushing to `main`, run `git pull`, `npm ci`, `npx prisma migrate deploy`, and `npm run build` on the server as `teenovatex`; restart `teenovatex-backend` with systemd and check `/health/ready`.
+See [the current infrastructure and recovery runbook](docs/INFRASTRUCTURE.md) and [platform notes](docs/PLATFORM.md). The live API and PostgreSQL 18 run together in Docker Compose on Oracle A1. Review migrations, update the backend checkout, rebuild and restart only the `api` service, then check `/health/ready`. Frontend deployments remain on Vercel.
