@@ -1,5 +1,7 @@
 # TeenovateX platform notes
 
+For the current VPS, PostgreSQL, DNS, and backups, read [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
+
 ## Principles
 - **Everyone is equal.** No follow feature, no follower counts. Anyone can message anyone by username unless one has blocked the other. Popularity is not a feature.
 - **Safe by other means:** blocks, reports, suspensions, the content filter (no contact details, off-platform requests, or links from accounts under 3 days old), moderator review of reported threads only, and an audit log of every staff action.
@@ -10,7 +12,7 @@
 
 ## Hosts
 - `teenovatex.org` landing, `app.teenovatex.org` members, `admin.teenovatex.org` staff sign-in and console (all one Next.js project on Vercel; DNS at Cloudflare, CNAME to `cname.vercel-dns.com`, DNS only).
-- `api.teenovatex.org` the backend on the VPS. Every site origin must be in `FRONTEND_URL` (CORS).
+- `api.teenovatex.org` the backend on the Oracle A1 VPS and local PostgreSQL 18. Every site origin must be in `FRONTEND_URL` (CORS).
 
 ## New host checklist
 Each audience gets its own subdomain, and browser tokens are stored per origin, so each host has its own separate sign-in. To add a new host:
@@ -19,7 +21,7 @@ Each audience gets its own subdomain, and browser tokens are stored per origin, 
 2. **Vercel domain**: add the domain in the Vercel project (Settings → Domains).
 3. **Backend CORS (`FRONTEND_URL`)**: add the origin to `FRONTEND_URL` in `.env` on the VPS (comma-separated list of allowed browser origins). Entries in `FRONTEND_URL` must be bare origins, no trailing slash, no wildcards.
 4. **Vercel env**: set `NEXT_PUBLIC_*_ORIGIN` on Vercel (e.g. for the new surface in backend issue #6 / `src/lib/hosts.ts`; the variable name comes from the host registry plan).
-5. **Restart backend**: run `systemctl restart teenovatex-backend` on the VPS so the server reloads `FRONTEND_URL`.
+5. **Restart backend**: on A1 run `cd /home/ubuntu/teenovatex && sudo docker compose up -d --no-deps api` so the container reloads `FRONTEND_URL`.
 6. **Verify with a CORS preflight curl**: test that the API allows preflight requests from the new origin:
    ```bash
    curl -i -X OPTIONS https://api.teenovatex.org/health \
@@ -36,7 +38,7 @@ Each audience gets its own subdomain, and browser tokens are stored per origin, 
 `DATABASE_URL`, `JWT_*`, `FRONTEND_URL`, `ADMIN_EMAILS`, `GEMINI_API_KEYS`, `GROQ_API_KEYS`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` (web push), `CLOUDINARY_*`, `RESEND_*`, optional `SENTRY_DSN`.
 
 ## Deploy
-1. Backend: push to `main`, then on the server as `teenovatex`: `git pull`, `npm ci`, `npx prisma migrate deploy`, `npm run build`; `systemctl restart teenovatex-backend`; check `/health/ready`.
+1. Backend: review and push to `main`, then on A1 update `/home/ubuntu/teenovatex/backend`, build the Docker Compose `api` service, run `npx prisma migrate deploy` against the local `db`, restart only `api`, and check `/health/ready`. See [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 2. Frontend: push to `main`; Vercel builds it. CI also enforces the first-load JS budget (`scripts/check-budget.mjs`).
 3. Migrations are additive only. Old tables (e.g. `Follow`) stay in the database, unused.
 
