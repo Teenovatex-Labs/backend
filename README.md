@@ -26,4 +26,4 @@ Use the [`.env.example`](.env.example) file as the environment configuration ref
 
 ## Deployment
 
-See [the current infrastructure and recovery runbook](docs/INFRASTRUCTURE.md) and [platform notes](docs/PLATFORM.md). The live API and PostgreSQL 18 run together in Docker Compose on Oracle A1. Review migrations, update the backend checkout, rebuild and restart only the `api` service, then check `/health/ready`. Frontend deployments remain on Vercel.
+See [the infrastructure and recovery runbook](docs/INFRASTRUCTURE.md) and [platform notes](docs/PLATFORM.md) for the full procedure. The live API and PostgreSQL 18 run together in Docker Compose on Oracle A1. For a backend release, review the migrations, push to `main`, update the backend checkout on A1, run `npx prisma migrate deploy` against the local database, rebuild and restart only the `api` service, then verify `/health/ready`. Frontend deployments remain on Vercel.
