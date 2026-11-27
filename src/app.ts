@@ -42,6 +42,7 @@ import { adminMembershipRouter, membershipRouter } from './routes/membership.js'
 import adminCohortsRouter from './routes/adminCohorts.js';
 import adminHistoryRouter from './routes/adminHistory.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
+import settingsAdminRouter from './routes/settings-admin.js';
 
 const app = express();
 
@@ -93,6 +94,7 @@ app.use(`${v1}/badges`, badgesRouter);
 app.use(`${v1}/admin/onboarding`, adminOnboardingRouter);
 app.use(`${v1}/onboarding`, onboardingRouter);
 app.use(`${v1}/admin/applications`, adminApplicationsRouter);
+app.use(`${v1}/admin/settings`, settingsAdminRouter);
 app.use(`${v1}/admin`, adminRouter);
 app.use(`${v1}/applications`, admissionsRouter);
 app.use(`${v1}/community`, communityRouter);
