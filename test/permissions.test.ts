@@ -12,7 +12,7 @@ afterAll(() => prisma.$disconnect());
 
 // What moderators and admins could do on main before the permissions map existed.
 const STAFF: Permission[] = [
-  'staff.access', 'reports.read', 'reports.resolve', 'users.read', 'users.suspend', 'audit.read',
+  'staff.access', 'moderation.read', 'reports.read', 'reports.resolve', 'users.read', 'users.suspend', 'audit.read',
   'attachments.review', 'events.manage', 'announcements.manage', 'learn.manage', 'analytics.read',
 ];
 const ADMIN_ONLY: Permission[] = [

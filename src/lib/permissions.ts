@@ -9,6 +9,7 @@ import type { Role } from '@prisma/client';
  */
 const STAFF_PERMISSIONS = [
   'staff.access', // the admin console itself
+  'moderation.read',
   'reports.read',
   'reports.resolve',
   'users.read',
