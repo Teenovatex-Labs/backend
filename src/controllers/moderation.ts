@@ -8,6 +8,8 @@ import { moderationQuerySchema, moderationTargetIdSchema, moderationTargetTypeSc
 
 type ContentType = 'post' | 'comment' | 'lab';
 
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
 const parseQuery = (req: AuthRequest) => {
   const parsed = moderationQuerySchema.safeParse(req.query);
   if (!parsed.success) {
@@ -183,6 +185,59 @@ export const listLabs = async (req: AuthRequest, res: Response): Promise<void> =
     })),
     next_cursor: page.next_cursor,
   });
+};
+
+export const moderationStats = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!req.userId) throw new HttpError(401, 'UNAUTHORIZED', 'Unauthorized');
+
+  const now = new Date();
+  const since = new Date(now.getTime() - SEVEN_DAYS_MS);
+  const [caller, openReports, oldestOpenReport, openImageReviews, suspendedUsers, callerActions] = await Promise.all([
+    prisma.user.findUnique({ where: { id: req.userId }, select: { role: true } }),
+    prisma.report.count({ where: { status: 'open' } }),
+    prisma.report.findFirst({ where: { status: 'open' }, orderBy: { created_at: 'asc' }, select: { created_at: true } }),
+    prisma.messageAttachment.count({ where: { status: 'pending' } }),
+    prisma.user.count({ where: { suspended_until: { gt: now } } }),
+    prisma.auditLog.count({ where: { actor_id: req.userId, created_at: { gte: since } } }),
+  ]);
+  if (!caller) throw new HttpError(401, 'UNAUTHORIZED', 'Unauthorized');
+
+  const result = {
+    open_reports: openReports,
+    oldest_open_report_age_seconds: oldestOpenReport
+      ? Math.floor(Math.max(0, now.getTime() - oldestOpenReport.created_at.getTime()) / 1000)
+      : null,
+    open_image_reviews: openImageReviews,
+    suspended_users: suspendedUsers,
+    my_actions_7d: callerActions,
+  };
+
+  if (caller.role === 'admin') {
+    const moderators = await prisma.user.findMany({
+      where: { role: 'moderator' },
+      select: { id: true, username: true },
+      orderBy: { username: 'asc' },
+    });
+    const actions = moderators.length
+      ? await prisma.auditLog.groupBy({
+          by: ['actor_id'],
+          where: { actor_id: { in: moderators.map((moderator) => moderator.id) }, created_at: { gte: since } },
+          _count: { _all: true },
+        })
+      : [];
+    const actionCounts = new Map(actions.map((entry) => [entry.actor_id, entry._count._all]));
+
+    res.json({
+      ...result,
+      moderator_actions_7d: moderators.map((moderator) => ({
+        username: moderator.username,
+        actions: actionCounts.get(moderator.id) ?? 0,
+      })),
+    });
+    return;
+  }
+
+  res.json(result);
 };
 
 const changeVisibility =

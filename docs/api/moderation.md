@@ -48,3 +48,21 @@ All routes require a bearer access token. Moderators and admins need `moderation
   Restore returns `"Content restored"`.
 - Errors: `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `ALREADY_HIDDEN`, `NOT_HIDDEN`, `CONTENT_CHANGED`, `VALIDATION_ERROR`
 - Audit actions: `moderation.hide` and `moderation.restore`
+
+### `GET /admin/moderation/stats`
+- Access: `moderation.read`
+- 200:
+  ```json
+  {
+    "open_reports": 4,
+    "oldest_open_report_age_seconds": 86400,
+    "open_image_reviews": 2,
+    "suspended_users": 1,
+    "my_actions_7d": 3,
+    "moderator_actions_7d": [
+      { "username": "member_username", "actions": 2 }
+    ]
+  }
+  ```
+  `oldest_open_report_age_seconds` is null when no reports are open. `moderator_actions_7d` is included for admins only and lists each moderator, including those with no actions during the period. `my_actions_7d` and the per-moderator counts cover all audit-log actions in the last seven days.
+- Errors: `UNAUTHORIZED`, `FORBIDDEN`
