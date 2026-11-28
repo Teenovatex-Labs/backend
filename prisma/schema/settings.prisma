@@ -1,0 +1,8 @@
+model SystemSetting {
+  key        String   @id
+  value      Json
+  updated_by String
+  updated_at DateTime @updatedAt
+
+  @@map("system_settings")
+}
