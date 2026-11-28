@@ -1,10 +1,11 @@
 import { Router } from 'express';
-import { hideContent, listComments, listLabs, listPosts, restoreContent } from '../controllers/moderation.js';
+import { hideContent, listComments, listLabs, listPosts, moderationStats, restoreContent } from '../controllers/moderation.js';
 import { requireAuth, requirePermission } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth);
 
+router.get('/stats', requirePermission('moderation.read'), moderationStats);
 router.get('/posts', requirePermission('moderation.read'), listPosts);
 router.get('/comments', requirePermission('moderation.read'), listComments);
 router.get('/labs', requirePermission('moderation.read'), listLabs);

@@ -178,3 +178,79 @@ describe('moderation hide and restore', () => {
     expect(missing.status).toBe(404);
   });
 });
+
+describe('moderation stats', () => {
+  it('returns queue stats, caller actions and an admin-only moderator breakdown', async () => {
+    const now = new Date();
+    const moderator = await makeUser({ role: 'moderator' });
+    const idleModerator = await makeUser({ role: 'moderator' });
+    const admin = await makeUser({ role: 'admin' });
+    const member = await makeUser();
+    const reporter = await makeUser();
+    const suspended = await makeUser({ suspended_until: new Date(now.getTime() + 60_000) });
+    await makeUser({ suspended_until: new Date(now.getTime() - 60_000) });
+
+    await prisma.report.createMany({
+      data: [
+        { reporter_id: reporter.user.id, target_type: 'post', target_id: 'old-report', reason: 'spam', created_at: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+        { reporter_id: reporter.user.id, target_type: 'comment', target_id: 'recent-report', reason: 'spam', created_at: new Date(now.getTime() - 60 * 60 * 1000) },
+        { reporter_id: reporter.user.id, target_type: 'lab', target_id: 'closed-report', reason: 'spam', status: 'dismissed' },
+      ],
+    });
+
+    const conversation = await prisma.conversation.create({
+      data: { members: { create: { user_id: suspended.user.id } } },
+    });
+    const message = await prisma.message.create({
+      data: { conversation_id: conversation.id, sender_id: suspended.user.id, body: 'Image review fixture' },
+    });
+    await prisma.messageAttachment.create({
+      data: { message_id: message.id, uploader_id: suspended.user.id, public_id: 'pending-review', width: 10, height: 10 },
+    });
+    const approvedConversation = await prisma.conversation.create({
+      data: { members: { create: { user_id: reporter.user.id } } },
+    });
+    const approvedMessage = await prisma.message.create({
+      data: { conversation_id: approvedConversation.id, sender_id: reporter.user.id, body: 'Approved image fixture' },
+    });
+    await prisma.messageAttachment.create({
+      data: {
+        message_id: approvedMessage.id,
+        uploader_id: reporter.user.id,
+        public_id: 'approved-image',
+        width: 10,
+        height: 10,
+        status: 'approved',
+      },
+    });
+
+    await prisma.auditLog.createMany({
+      data: [
+        { actor_id: moderator.user.id, action: 'moderation.hide', created_at: new Date(now.getTime() - 60_000) },
+        { actor_id: moderator.user.id, action: 'report.warn', created_at: new Date(now.getTime() - 30_000) },
+        { actor_id: idleModerator.user.id, action: 'moderation.restore', created_at: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000) },
+      ],
+    });
+
+    const moderatorResponse = await request(app).get('/api/v1/admin/moderation/stats').set(moderator.auth);
+    expect(moderatorResponse.status).toBe(200);
+    expect(moderatorResponse.body).toMatchObject({
+      open_reports: 2,
+      open_image_reviews: 1,
+      suspended_users: 1,
+      my_actions_7d: 2,
+    });
+    expect(moderatorResponse.body.oldest_open_report_age_seconds).toBeGreaterThanOrEqual(7199);
+    expect(moderatorResponse.body.oldest_open_report_age_seconds).toBeLessThanOrEqual(7201);
+    expect(moderatorResponse.body).not.toHaveProperty('moderator_actions_7d');
+    expect((await request(app).get('/api/v1/admin/moderation/stats').set(member.auth)).status).toBe(403);
+    expect((await request(app).get('/api/v1/admin/moderation/stats')).status).toBe(401);
+
+    const adminResponse = await request(app).get('/api/v1/admin/moderation/stats').set(admin.auth);
+    expect(adminResponse.status).toBe(200);
+    expect(adminResponse.body.moderator_actions_7d).toEqual([
+      { username: idleModerator.user.username, actions: 0 },
+      { username: moderator.user.username, actions: 2 },
+    ].sort((a, b) => a.username.localeCompare(b.username)));
+  });
+});
