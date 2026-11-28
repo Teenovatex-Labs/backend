@@ -28,6 +28,7 @@ import { startRetention } from './jobs/retention.js';
 import pointsRouter from './routes/points.js';
 import leaderboardRouter from './routes/leaderboard.js';
 import notificationsRouter from './routes/notifications.js';
+import settingsAdminRouter from './routes/settings-admin.js';
 import settingsRouter from './routes/settings.js';
 import pushRouter from './routes/push.js';
 import contactRouter from './routes/contact.js';
@@ -42,7 +43,6 @@ import { adminMembershipRouter, membershipRouter } from './routes/membership.js'
 import adminCohortsRouter from './routes/adminCohorts.js';
 import adminHistoryRouter from './routes/adminHistory.js';
 import adminApplicationsRouter from './routes/adminApplications.js';
-import settingsAdminRouter from './routes/settings-admin.js';
 
 const app = express();
 
@@ -94,7 +94,6 @@ app.use(`${v1}/badges`, badgesRouter);
 app.use(`${v1}/admin/onboarding`, adminOnboardingRouter);
 app.use(`${v1}/onboarding`, onboardingRouter);
 app.use(`${v1}/admin/applications`, adminApplicationsRouter);
-app.use(`${v1}/admin/settings`, settingsAdminRouter);
 app.use(`${v1}/admin`, adminRouter);
 app.use(`${v1}/applications`, admissionsRouter);
 app.use(`${v1}/community`, communityRouter);
@@ -108,6 +107,7 @@ app.use(`${v1}/points`, pointsRouter);
 app.use(`${v1}/leaderboard`, leaderboardRouter);
 app.use(`${v1}/notifications`, notificationsRouter);
 app.use(`${v1}/settings`, settingsRouter);
+app.use(`${v1}/admin/settings`, settingsAdminRouter);
 app.use(`${v1}/push`, pushRouter);
 app.use(`${v1}/contact`, contactRouter);
 
